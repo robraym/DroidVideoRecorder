@@ -15,9 +15,7 @@ public class DroidReceiver extends BroadcastReceiver {
 
         try {
             Intent mIntent = new Intent(context, DroidConfigurationActivity.class);
-            mIntent.addCategory(Intent.CATEGORY_LAUNCHER);
-            mIntent.setAction(Intent.ACTION_MAIN);
-            mIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            mIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             String messageBroadCast = intent.getStringExtra(DroidConstants.CHAVERECEIVER);
             //Toast.makeText(context, messageBroadCast, Toast.LENGTH_LONG).show();
             mIntent.putExtra(DroidConstants.CHAMADAPORCOMANDOTEXTO, messageBroadCast );

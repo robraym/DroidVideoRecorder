@@ -1,11 +1,16 @@
 package com.droid.videoRecorder;
 
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.hardware.Camera;
 import android.media.CamcorderProfile;
 import android.media.MediaRecorder;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Environment;
+import android.os.ParcelFileDescriptor;
+import android.provider.MediaStore;
 import android.view.SurfaceHolder;
 import java.io.File;
 import java.io.IOException;
@@ -18,6 +23,8 @@ public class DroidVideoRecorder {
     private static Camera mServiceCamera;
     private static MediaRecorder mMediaRecorder;
     private static Context appContext;
+    private static Uri currentVideoUri;
+    private static ParcelFileDescriptor currentVideoFile;
 
     public static DroidConstants.EnumStateRecVideo StateRecVideo;
     public static DroidConstants.EnumTypeViewCam TypeViewCam;
@@ -56,16 +63,9 @@ public class DroidVideoRecorder {
         } catch (Exception e) {
         } finally {
             if (strSDCardPath == "" || strDirectory == "") {
-                if (appContext != null) {
-                    File directory = appContext.getExternalFilesDir(Environment.DIRECTORY_MOVIES);
-                    if (directory != null) {
-                        strDirectory = CreateGetDirectory(directory.getAbsolutePath());
-                    }
-                }
-
                 if (strDirectory == "") {
-                    strSDCardPath = Environment.getExternalStorageDirectory().toString();
-                    strDirectory = CreateGetDirectory(strSDCardPath + DroidConstants.PASTADOSARQUIVOSGRAVADOS);
+                    File directory = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "Video Recorder");
+                    strDirectory = CreateGetDirectory(directory.getAbsolutePath());
                 }
             }
         }
@@ -101,9 +101,71 @@ public class DroidVideoRecorder {
 
     private static String NameFileRecDateNow()
     {
-        SimpleDateFormat simpleFormat = new SimpleDateFormat("yyyyMMdd_hhmmss");
+        SimpleDateFormat simpleFormat = new SimpleDateFormat("yyyyMMdd_HHmmss");
         String dateformat = simpleFormat.format( new Date( System.currentTimeMillis() ));
         return GetPathStorage() + "/DVR_" + dateformat +  ".mp4";
+    }
+
+    private static String NameFileDateNow() {
+        SimpleDateFormat simpleFormat = new SimpleDateFormat("yyyyMMdd_HHmmss");
+        return "DVR_" + simpleFormat.format(new Date(System.currentTimeMillis())) + ".mp4";
+    }
+
+    private static void SetOutputFile(MediaRecorder mediaRecorder) throws IOException {
+        CloseCurrentVideoFile();
+        currentVideoUri = null;
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && appContext != null) {
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Video.Media.DISPLAY_NAME, NameFileDateNow());
+            values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
+            values.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/Video Recorder");
+            values.put(MediaStore.Video.Media.IS_PENDING, 1);
+
+            currentVideoUri = appContext.getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values);
+            if (currentVideoUri == null) {
+                throw new IOException("Nao foi possivel criar o arquivo de video");
+            }
+
+            currentVideoFile = appContext.getContentResolver().openFileDescriptor(currentVideoUri, "w");
+            if (currentVideoFile == null) {
+                throw new IOException("Nao foi possivel abrir o arquivo de video");
+            }
+
+            mediaRecorder.setOutputFile(currentVideoFile.getFileDescriptor());
+            return;
+        }
+
+        mediaRecorder.setOutputFile(NameFileRecDateNow());
+    }
+
+    private static void FinishCurrentVideoFile() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && appContext != null && currentVideoUri != null) {
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Video.Media.IS_PENDING, 0);
+            appContext.getContentResolver().update(currentVideoUri, values, null, null);
+        }
+        CloseCurrentVideoFile();
+        currentVideoUri = null;
+    }
+
+    private static void DeleteCurrentVideoFile() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && appContext != null && currentVideoUri != null) {
+            appContext.getContentResolver().delete(currentVideoUri, null, null);
+        }
+        CloseCurrentVideoFile();
+        currentVideoUri = null;
+    }
+
+    private static void CloseCurrentVideoFile() {
+        if (currentVideoFile != null) {
+            try {
+                currentVideoFile.close();
+            } catch (IOException ex) {
+                Log.d("StartRecording", ex.getMessage());
+            }
+            currentVideoFile = null;
+        }
     }
 
     private static int GetDisplayOrientationRec(int orientation)
@@ -235,7 +297,7 @@ public class DroidVideoRecorder {
             mMediaRecorder.setCamera(mServiceCamera);
             mMediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
             mMediaRecorder.setVideoSource(MediaRecorder.VideoSource.CAMERA);
-            mMediaRecorder.setOutputFile(NameFileRecDateNow());
+            SetOutputFile(mMediaRecorder);
 
             mMediaRecorder.setProfile(CamcorderProfile.get(qualidadeCamera));
 
@@ -248,21 +310,34 @@ public class DroidVideoRecorder {
         catch (Exception ex)
         {
             Log.d("StartRecording", ex.getMessage() );
+            DeleteCurrentVideoFile();
         }
     }
 
     private static void ResetRecord(boolean record)
     {
-        if (record) {
-            mMediaRecorder.stop();
-            mMediaRecorder.reset();
-            mMediaRecorder.release();
+        if (record && mMediaRecorder != null) {
+            try {
+                mMediaRecorder.stop();
+                FinishCurrentVideoFile();
+            } catch (Exception ex) {
+                Log.d("StopRecording", ex.getMessage());
+                DeleteCurrentVideoFile();
+            }
+            try {
+                mMediaRecorder.reset();
+                mMediaRecorder.release();
+            } catch (Exception ex) {
+                Log.d("StopRecording", ex.getMessage());
+            }
             mMediaRecorder = null;
         }
 
-        mServiceCamera.stopPreview();
-        mServiceCamera.release();
-        mServiceCamera = null;
+        if (mServiceCamera != null) {
+            mServiceCamera.stopPreview();
+            mServiceCamera.release();
+            mServiceCamera = null;
+        }
 
     }
 

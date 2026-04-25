@@ -90,7 +90,7 @@ public class DroidConfigurationActivity extends PreferenceActivity {
             });
 
             ltp_localGravacaoVideo = (ListPreference) findPreference("ltp_localGravacaoVideo");
-            ltp_localGravacaoVideo.setSummary(DroidPrefsUtils.obtemDescricaoPreferencias(context, String.valueOf(DroidPrefsUtils.obtemLocalGravacao(context)), R.array.localArquivosGravados, R.array.valor_localArquivosGravados));
+            ConfigurarLocaisGravacao();
             ltp_localGravacaoVideo.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
                 @Override
                 public boolean onPreferenceChange(Preference preference, Object newValue) {
@@ -131,6 +131,29 @@ public class DroidConfigurationActivity extends PreferenceActivity {
         } else finish();
 
         StartServiceWhenReady(chamadaPeloServico);
+    }
+
+    private void ConfigurarLocaisGravacao() {
+        boolean temCartaoSd = DroidPrefsUtils.temCartaoSd(context);
+        if (temCartaoSd) {
+            ltp_localGravacaoVideo.setEntries(R.array.localArquivosGravados);
+            ltp_localGravacaoVideo.setEntryValues(R.array.valor_localArquivosGravados);
+            ltp_localGravacaoVideo.setEnabled(true);
+        } else {
+            ltp_localGravacaoVideo.setEntries(new CharSequence[]{"Interno"});
+            ltp_localGravacaoVideo.setEntryValues(new CharSequence[]{"0"});
+            ltp_localGravacaoVideo.setValue("0");
+            ltp_localGravacaoVideo.setEnabled(false);
+        }
+
+        ltp_localGravacaoVideo.setSummary(DroidPrefsUtils.obtemDescricaoPreferencias(context, String.valueOf(DroidPrefsUtils.obtemLocalGravacao(context)), R.array.localArquivosGravados, R.array.valor_localArquivosGravados));
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        StartServiceWhenReady(false);
     }
 
 
@@ -176,7 +199,7 @@ public class DroidConfigurationActivity extends PreferenceActivity {
     }
 
     private void StartServiceWhenReady(boolean chamadaPeloServico) {
-        if (chamadaPeloServico || serviceStarted) {
+        if (chamadaPeloServico || (serviceStarted && ChamadaBroadCastPorComandoTexto().isEmpty())) {
             return;
         }
 

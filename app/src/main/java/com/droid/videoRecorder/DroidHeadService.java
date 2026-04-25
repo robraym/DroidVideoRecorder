@@ -39,6 +39,9 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     private AsyncTask asyncTask;
     private View.OnTouchListener onTouchListener;
     private String chamadaPorComandoTexto;
+    private boolean pendingPreview;
+    private DroidConstants.EnumTypeViewCam pendingPreviewCam = DroidConstants.EnumTypeViewCam.FacingBack;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private boolean necessarioComandoDepoisDoInit = false;
     private Intent mIntentService;
@@ -53,6 +56,13 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     WindowManager.LayoutParams params = new WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
+            getOverlayWindowType(),
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            PixelFormat.TRANSLUCENT);
+
+    WindowManager.LayoutParams surfaceParams = new WindowManager.LayoutParams(
+            1,
+            1,
             getOverlayWindowType(),
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT);
@@ -93,6 +103,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     public int onStartCommand(Intent intent, int flags, int startId) {
         Log.d("DVR", "DroidHeadService onStartCommand");
         mIntentService = intent != null ? intent : new Intent();
+        Log.d("DVR", "Comando recebido pelo servico: " + mIntentService.getStringExtra(DroidConstants.CHAMADAPORCOMANDOTEXTO));
 
         if (ComandoPorTexto("MI")) {
             ModoOculto();
@@ -191,8 +202,24 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         windowManager = (WindowManager) context.getSystemService(WINDOW_SERVICE);
 
         mSurfaceView = new SurfaceView(context);
-        mSurfaceView.setLayoutParams(params);
+        mSurfaceView.setLayoutParams(surfaceParams);
         mSurfaceView.getHolder().setFixedSize(1, 1);
+        mSurfaceView.getHolder().addCallback(new SurfaceHolder.Callback() {
+            @Override
+            public void surfaceCreated(SurfaceHolder holder) {
+                StartPendingPreview();
+            }
+
+            @Override
+            public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+                StartPendingPreview();
+            }
+
+            @Override
+            public void surfaceDestroyed(SurfaceHolder holder) {
+                pendingPreview = false;
+            }
+        });
 
         chatHead = new ImageView(context);
         chatHead.setImageResource(R.mipmap.stoprec);
@@ -201,7 +228,8 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         txtHead.setVisibility(View.INVISIBLE);
 
         params.gravity = Gravity.CENTER;
-        windowManager.addView(mSurfaceView, params);
+        surfaceParams.gravity = Gravity.CENTER;
+        windowManager.addView(mSurfaceView, surfaceParams);
         windowManager.addView(chatHead, params);
         windowManager.addView(txtHead, params);
         tts = new TextToSpeech(context, this);
@@ -371,16 +399,15 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
 
     private void ShowView() {
         chatHead.setImageResource(R.mipmap.viewrec);
-        mSurfaceView.getHolder().setFixedSize(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.MATCH_PARENT);
-        DroidVideoRecorder.OnInitRec(context.getResources().getConfiguration(), orientationEvent, DroidConstants.EnumTypeViewCam.FacingBack);
-        DroidVideoRecorder.OnViewRec(mSurfaceView.getHolder());
+        SetPreviewFullScreen(true);
+        StartPreview(DroidConstants.EnumTypeViewCam.FacingBack);
         DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.VIEW;
         Vibrar(100);
     }
 
     private void ChangeTypeViewCam() {
         chatHead.setImageResource(R.mipmap.viewrec);
-        mSurfaceView.getHolder().setFixedSize(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.MATCH_PARENT);
+        SetPreviewFullScreen(true);
 
         if (DroidVideoRecorder.TypeViewCam == DroidConstants.EnumTypeViewCam.FacingBack) {
             Fala(getString(R.string.visualizandoCameraFronta));
@@ -390,15 +417,14 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             DroidVideoRecorder.TypeViewCam = DroidConstants.EnumTypeViewCam.FacingBack;
         }
 
-        DroidVideoRecorder.OnInitRec(getResources().getConfiguration(), orientationEvent, DroidVideoRecorder.TypeViewCam);
-        DroidVideoRecorder.OnViewRec(mSurfaceView.getHolder());
+        StartPreview(DroidVideoRecorder.TypeViewCam);
         DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.VIEW;
         Vibrar(100);
     }
 
     private void ShowRec() {
         chatHead.setImageResource(R.mipmap.rec);
-        mSurfaceView.getHolder().setFixedSize(1, 1);
+        SetPreviewFullScreen(false);
         DroidVideoRecorder.OnInitRec(getResources().getConfiguration(), orientationEvent, DroidVideoRecorder.TypeViewCam);
         DroidVideoRecorder.OnStartRecording(mSurfaceView.getHolder(), orientationEvent, DroidPrefsUtils.obtemQualidadeCamera(this, DroidConstants.EnumTypeViewCam.FacingBack));
         DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.RECORD;
@@ -418,7 +444,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     }
 
     private void GetDefaultStop() {
-        mSurfaceView.getHolder().setFixedSize(1, 1);
+        SetPreviewFullScreen(false);
         chatHead.setImageResource(R.mipmap.stoprec);
         DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.STOP;
         DroidVideoRecorder.OnInitRec(getResources().getConfiguration(), orientationEvent, DroidConstants.EnumTypeViewCam.FacingBack);
@@ -427,8 +453,54 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     }
 
     private void ShowStop() {
+        SetPreviewFullScreen(false);
         chatHead.setImageResource(R.mipmap.stoprec);
         DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.STOP;
+    }
+
+    private void SetPreviewFullScreen(boolean fullScreen) {
+        if (fullScreen) {
+            surfaceParams.width = WindowManager.LayoutParams.MATCH_PARENT;
+            surfaceParams.height = WindowManager.LayoutParams.MATCH_PARENT;
+            surfaceParams.gravity = Gravity.TOP | Gravity.LEFT;
+            surfaceParams.x = 0;
+            surfaceParams.y = 0;
+            mSurfaceView.getHolder().setSizeFromLayout();
+        } else {
+            surfaceParams.width = 1;
+            surfaceParams.height = 1;
+            surfaceParams.gravity = Gravity.CENTER;
+            surfaceParams.x = 0;
+            surfaceParams.y = 0;
+            mSurfaceView.getHolder().setFixedSize(1, 1);
+        }
+
+        try {
+            windowManager.updateViewLayout(mSurfaceView, surfaceParams);
+        } catch (Exception ex) {
+            Log.d("DVR", ex.getMessage());
+        }
+    }
+
+    private void StartPreview(DroidConstants.EnumTypeViewCam typeViewCam) {
+        pendingPreview = true;
+        pendingPreviewCam = typeViewCam;
+        mainHandler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                StartPendingPreview();
+            }
+        }, 300);
+    }
+
+    private void StartPendingPreview() {
+        if (!pendingPreview || mSurfaceView == null || !mSurfaceView.getHolder().getSurface().isValid()) {
+            return;
+        }
+
+        pendingPreview = false;
+        DroidVideoRecorder.OnInitRec(getResources().getConfiguration(), orientationEvent, pendingPreviewCam);
+        DroidVideoRecorder.OnViewRec(mSurfaceView.getHolder());
     }
 
     private void ShowClose() {

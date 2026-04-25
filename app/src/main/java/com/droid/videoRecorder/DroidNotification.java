@@ -5,6 +5,7 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.os.Bundle;
 import android.service.notification.StatusBarNotification;
+import android.util.Log;
 
 import java.util.Locale;
 
@@ -20,6 +21,7 @@ public class DroidNotification extends DroidBaseNotification {
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
         String msgNotification = getCommandFromNotification(sbn);
+        Log.d("DVR", "Comando por notificacao detectado: " + msgNotification);
 
         if (!msgNotification.isEmpty()) {
             long now = System.currentTimeMillis();
@@ -27,6 +29,8 @@ public class DroidNotification extends DroidBaseNotification {
                 SendBroadCast(msgNotification);
                 lastCommand = msgNotification;
                 lastCommandTime = now;
+            } else {
+                Log.d("DVR", "Comando por notificacao ignorado por duplicidade: " + msgNotification);
             }
         }
     }
@@ -62,7 +66,7 @@ public class DroidNotification extends DroidBaseNotification {
             }
         }
 
-        return findCommand(notificationText.toString());
+        return findLastCommand(notificationText.toString());
     }
 
     private void append(StringBuilder builder, CharSequence value) {
@@ -71,7 +75,7 @@ public class DroidNotification extends DroidBaseNotification {
         }
     }
 
-    private String findCommand(String text) {
+    private String findLastCommand(String text) {
         if (text == null) {
             return "";
         }
@@ -80,14 +84,25 @@ public class DroidNotification extends DroidBaseNotification {
                 .replace('\n', ' ')
                 .replace('\r', ' ');
         String[] commands = {"MIR", "CFG", "MI", "MV", "D", "R", "S", "V", "C", "Q"};
+        String lastCommandFound = "";
+        int lastCommandIndex = -1;
 
         for (String command : commands) {
-            if (normalized.contains("DVR=" + command) || normalized.contains("DVR" + command)) {
-                return DroidConstants.COMANDOINICIADOPOR + command;
+            int commandIndex = Math.max(
+                    normalized.lastIndexOf("DVR=" + command),
+                    normalized.lastIndexOf("DVR" + command));
+
+            if (commandIndex > lastCommandIndex) {
+                lastCommandIndex = commandIndex;
+                lastCommandFound = command;
             }
         }
 
-        return "";
+        if (lastCommandFound.isEmpty()) {
+            return "";
+        }
+
+        return DroidConstants.COMANDOINICIADOPOR + lastCommandFound;
     }
 
 }
