@@ -8,8 +8,8 @@ android {
         applicationId "com.droid.videoRecorder"
         minSdk 16
         targetSdk 36
-        versionCode 25
-        versionName "4.8"
+        versionCode 26
+        versionName "4.9"
     }
 
     compileOptions {

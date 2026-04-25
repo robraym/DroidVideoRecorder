@@ -1,34 +1,52 @@
 package com.droid.videoRecorder;
 
 import android.Manifest;
+import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.preference.ListPreference;
-import android.preference.Preference;
-import android.preference.PreferenceActivity;
-import android.preference.SwitchPreference;
+import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.util.Log;
+import android.util.TypedValue;
+import android.view.Gravity;
+import android.view.View;
+import android.widget.CompoundButton;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.Switch;
+import android.widget.TextView;
 import android.widget.Toast;
 
 /**
  * Created by Robson on 12/01/2016.
  */
-public class DroidConfigurationActivity extends PreferenceActivity {
+public class DroidConfigurationActivity extends Activity {
     private static final int REQUEST_RUNTIME_PERMISSIONS = 1001;
 
     private Context context;
-    private ListPreference ltp_localGravacaoVideo;
-    private SwitchPreference spf_aceitaComandoPorTexto;
+    private SharedPreferences preferences;
+    private Switch commandSwitch;
+    private TextView storageSummary;
     private boolean canFinish;
     private boolean serviceStarted;
     private boolean startupServiceRequested;
     private boolean overlayPermissionRequested;
     static int sdk_int = android.os.Build.VERSION.SDK_INT;
+    private static final int COLOR_BACKGROUND = Color.rgb(0, 0, 0);
+    private static final int COLOR_GROUP = Color.rgb(28, 29, 33);
+    private static final int COLOR_PRIMARY_TEXT = Color.rgb(248, 248, 250);
+    private static final int COLOR_SECONDARY_TEXT = Color.rgb(180, 182, 190);
+    private static final int COLOR_DIVIDER = Color.rgb(52, 53, 58);
 
     private boolean ExibeTelaInicial() {
         return DroidPrefsUtils.exibeTelaInicial(context);
@@ -49,6 +67,7 @@ public class DroidConfigurationActivity extends PreferenceActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         context = getBaseContext();
+        preferences = PreferenceManager.getDefaultSharedPreferences(context);
         boolean exibeTelaInicial = ExibeTelaInicial();
         boolean chamadaPeloServico = ChamadaPeloServico();
         boolean chamadaConfigPorComandoTexto = ChamadaConfigPorComandoTexto();
@@ -62,66 +81,276 @@ public class DroidConfigurationActivity extends PreferenceActivity {
         canFinish = true;
 
         if (exibeTelaInicial || chamadaPeloServico || chamadaConfigPorComandoTexto) {
-            addPreferencesFromResource(R.xml.preferences);
-
-            ltp_localGravacaoVideo = (ListPreference) findPreference("ltp_localGravacaoVideo");
-            ConfigurarLocaisGravacao();
-            ltp_localGravacaoVideo.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
-                @Override
-                public boolean onPreferenceChange(Preference preference, Object newValue) {
-                    preference.setSummary(DroidPrefsUtils.obtemDescricaoPreferencias(context, newValue.toString(), R.array.localArquivosGravados, R.array.valor_localArquivosGravados));
-                    DroidVideoRecorder.LocalGravacaoVideo = Integer.parseInt(newValue.toString());
-                    return true;
-                }
-            });
-
-
-                spf_aceitaComandoPorTexto = (SwitchPreference) findPreference("spf_aceitaComandoPorTexto");
-
-                spf_aceitaComandoPorTexto.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
-
-                    @Override
-                    public boolean onPreferenceChange(Preference preference, Object newValue) {
-                        try {
-                            Boolean aceita = (Boolean) newValue;
-                            Boolean status = DroidPrefsUtils.statusComandoPorTexto(context);
-                            if (aceita != status) {
-                                startActivity(new Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"));
-                                canFinish = false;
-                            }
-
-
-                        } catch (Exception ex) {
-                            Log.d("DVR", ex.getMessage());
-                        }
-                        return true;
-                    }
-                });
-
-            if (sdk_int < 21) {
-
-                spf_aceitaComandoPorTexto.setEnabled(false);
-            }
-
+            BuildSettingsScreen();
         } else finish();
 
         StartServiceWhenReady(chamadaPeloServico);
     }
 
-    private void ConfigurarLocaisGravacao() {
-        boolean temCartaoSd = DroidPrefsUtils.temCartaoSd(context);
-        if (temCartaoSd) {
-            ltp_localGravacaoVideo.setEntries(R.array.localArquivosGravados);
-            ltp_localGravacaoVideo.setEntryValues(R.array.valor_localArquivosGravados);
-            ltp_localGravacaoVideo.setEnabled(true);
-        } else {
-            ltp_localGravacaoVideo.setEntries(new CharSequence[]{"Interno"});
-            ltp_localGravacaoVideo.setEntryValues(new CharSequence[]{"0"});
-            ltp_localGravacaoVideo.setValue("0");
-            ltp_localGravacaoVideo.setEnabled(false);
+    private void BuildSettingsScreen() {
+        ScrollView scrollView = new ScrollView(this);
+        scrollView.setFillViewport(true);
+        scrollView.setBackgroundColor(COLOR_BACKGROUND);
+
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(20), dp(34), dp(20), dp(28));
+        scrollView.addView(content, new ScrollView.LayoutParams(
+                ScrollView.LayoutParams.MATCH_PARENT,
+                ScrollView.LayoutParams.WRAP_CONTENT));
+
+        TextView title = new TextView(this);
+        title.setText(getString(R.string.txt_titulo));
+        title.setTextColor(COLOR_PRIMARY_TEXT);
+        SetTextSize(title, 28);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setGravity(Gravity.START);
+        content.addView(title, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        TextView subtitle = new TextView(this);
+        subtitle.setText(getString(R.string.app_name));
+        subtitle.setTextColor(COLOR_SECONDARY_TEXT);
+        SetTextSize(subtitle, 13);
+        subtitle.setPadding(0, dp(4), 0, dp(22));
+        content.addView(subtitle, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout generalGroup = CreateGroup();
+        generalGroup.addView(CreateSwitchRow(
+                getString(R.string.txt_titulo),
+                getString(R.string.spf_exibe_iniciar),
+                "spf_exibeAoIniciar",
+                true,
+                true,
+                null));
+        generalGroup.addView(CreateDivider());
+
+        generalGroup.addView(CreateSwitchRow(
+                getString(R.string.spf_titulo),
+                getString(R.string.spf_exibe_tempo_gravacao),
+                "spf_exibeTempoGravacao",
+                true,
+                true,
+                null));
+        generalGroup.addView(CreateDivider());
+
+        generalGroup.addView(CreateStorageRow());
+        content.addView(generalGroup);
+
+        LinearLayout commandGroup = CreateGroup();
+        LinearLayout.LayoutParams commandParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        commandParams.setMargins(0, dp(14), 0, 0);
+        commandGroup.setLayoutParams(commandParams);
+
+        commandGroup.addView(CreateSwitchRow(
+                getString(R.string.comando),
+                getString(R.string.aceitaComandoPorTexto),
+                "spf_aceitaComandoPorTexto",
+                false,
+                sdk_int >= 21,
+                new CompoundButton.OnCheckedChangeListener() {
+                    @Override
+                    public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                        try {
+                            boolean status = DroidPrefsUtils.statusComandoPorTexto(context);
+                            if (isChecked != status) {
+                                canFinish = false;
+                                startActivity(new Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"));
+                            }
+                        } catch (Exception ex) {
+                            LogException("DVR", ex);
+                        }
+                    }
+                }));
+        commandGroup.addView(CreateDivider());
+
+        commandGroup.addView(CreateSwitchRow(
+                getString(R.string.fala),
+                getString(R.string.leComando),
+                "spf_leComando",
+                false,
+                true,
+                null));
+        content.addView(commandGroup);
+
+        setContentView(scrollView);
+        RefreshStorageSummary();
+    }
+
+    private View CreateSwitchRow(String title, String summary, final String key, boolean defaultValue, boolean enabled,
+                                  CompoundButton.OnCheckedChangeListener extraListener) {
+        LinearLayout row = CreateRow();
+        row.setEnabled(enabled);
+
+        LinearLayout texts = CreateTexts(title, summary);
+        row.addView(texts, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+
+        final Switch rowSwitch = new Switch(this);
+        if ("spf_aceitaComandoPorTexto".equals(key)) {
+            commandSwitch = rowSwitch;
+        }
+        StyleSwitch(rowSwitch);
+        rowSwitch.setChecked(preferences.getBoolean(key, defaultValue));
+        rowSwitch.setEnabled(enabled);
+        rowSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                preferences.edit().putBoolean(key, isChecked).apply();
+                if (buttonView.getTag() instanceof CompoundButton.OnCheckedChangeListener) {
+                    ((CompoundButton.OnCheckedChangeListener) buttonView.getTag()).onCheckedChanged(buttonView, isChecked);
+                }
+            }
+        });
+        rowSwitch.setTag(extraListener);
+        row.addView(rowSwitch);
+
+        row.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (rowSwitch.isEnabled()) {
+                    rowSwitch.setChecked(!rowSwitch.isChecked());
+                }
+            }
+        });
+
+        return row;
+    }
+
+    private View CreateStorageRow() {
+        LinearLayout row = CreateRow();
+        LinearLayout texts = CreateTexts(getString(R.string.txt_gravacao_videos), "");
+        storageSummary = (TextView) texts.getChildAt(1);
+        row.addView(texts, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+
+        TextView arrow = new TextView(this);
+        arrow.setText(">");
+        arrow.setTextColor(Color.rgb(176, 179, 188));
+        SetTextSize(arrow, 18);
+        arrow.setGravity(Gravity.CENTER);
+        row.addView(arrow, new LinearLayout.LayoutParams(dp(32), LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        row.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                ShowStorageDialog();
+            }
+        });
+        return row;
+    }
+
+    private LinearLayout CreateRow() {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(16), dp(14), dp(16), dp(14));
+        return row;
+    }
+
+    private LinearLayout CreateGroup() {
+        LinearLayout group = new LinearLayout(this);
+        group.setOrientation(LinearLayout.VERTICAL);
+        group.setBackground(CreateRoundedBackground(COLOR_GROUP, 22));
+        return group;
+    }
+
+    private View CreateDivider() {
+        View divider = new View(this);
+        divider.setBackgroundColor(COLOR_DIVIDER);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                Math.max(1, dp(1)));
+        params.setMargins(dp(16), 0, dp(16), 0);
+        divider.setLayoutParams(params);
+        return divider;
+    }
+
+    private GradientDrawable CreateRoundedBackground(int color, int radiusDp) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(color);
+        drawable.setCornerRadius(dp(radiusDp));
+        return drawable;
+    }
+
+    private LinearLayout CreateTexts(String title, String summary) {
+        LinearLayout texts = new LinearLayout(this);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        texts.setPadding(0, 0, dp(14), 0);
+
+        TextView titleView = new TextView(this);
+        titleView.setText(title);
+        titleView.setTextColor(COLOR_PRIMARY_TEXT);
+        SetTextSize(titleView, 16);
+        titleView.setTypeface(Typeface.DEFAULT_BOLD);
+        titleView.setSingleLine(false);
+        texts.addView(titleView);
+
+        TextView summaryView = new TextView(this);
+        summaryView.setText(summary);
+        summaryView.setTextColor(COLOR_SECONDARY_TEXT);
+        SetTextSize(summaryView, 13);
+        summaryView.setSingleLine(false);
+        summaryView.setPadding(0, dp(4), 0, 0);
+        texts.addView(summaryView);
+
+        return texts;
+    }
+
+    private void StyleSwitch(Switch rowSwitch) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+            return;
         }
 
-        ltp_localGravacaoVideo.setSummary(DroidPrefsUtils.obtemDescricaoPreferencias(context, String.valueOf(DroidPrefsUtils.obtemLocalGravacao(context)), R.array.localArquivosGravados, R.array.valor_localArquivosGravados));
+        int[][] states = new int[][]{
+                new int[]{android.R.attr.state_checked},
+                new int[]{-android.R.attr.state_enabled},
+                new int[]{}
+        };
+
+        rowSwitch.setThumbTintList(new ColorStateList(states, new int[]{
+                Color.rgb(66, 133, 244),
+                Color.rgb(120, 123, 132),
+                Color.rgb(232, 234, 237)
+        }));
+        rowSwitch.setTrackTintList(new ColorStateList(states, new int[]{
+                Color.rgb(25, 78, 163),
+                Color.rgb(50, 52, 58),
+                Color.rgb(88, 91, 99)
+        }));
+    }
+
+    private void ShowStorageDialog() {
+        final boolean temCartaoSd = DroidPrefsUtils.temCartaoSd(context);
+        final String[] entries = temCartaoSd
+                ? getResources().getStringArray(R.array.localArquivosGravados)
+                : new String[]{"Interno"};
+        final String[] values = temCartaoSd
+                ? getResources().getStringArray(R.array.valor_localArquivosGravados)
+                : new String[]{"0"};
+
+        new AlertDialog.Builder(this)
+                .setTitle(getString(R.string.txt_gravacao_videos))
+                .setItems(entries, (dialog, which) -> {
+                    preferences.edit().putString("ltp_localGravacaoVideo", values[which]).apply();
+                    DroidVideoRecorder.LocalGravacaoVideo = Integer.parseInt(values[which]);
+                    RefreshStorageSummary();
+                })
+                .show();
+    }
+
+    private void RefreshStorageSummary() {
+        int storage = DroidPrefsUtils.obtemLocalGravacao(context);
+        if (storageSummary != null) {
+            storageSummary.setText(DroidPrefsUtils.obtemDescricaoPreferencias(
+                    context,
+                    String.valueOf(storage),
+                    R.array.localArquivosGravados,
+                    R.array.valor_localArquivosGravados));
+        }
     }
 
     @Override
@@ -131,7 +360,6 @@ public class DroidConfigurationActivity extends PreferenceActivity {
         StartServiceWhenReady(false);
     }
 
-
     @Override
     protected void onResume() {
         super.onResume();
@@ -139,9 +367,10 @@ public class DroidConfigurationActivity extends PreferenceActivity {
             if (!ExibeTelaInicial() && !ChamadaPeloServico() && !ChamadaConfigPorComandoTexto()) {
                 finish();
             } else {
-                if (sdk_int >= 21) {
-                    spf_aceitaComandoPorTexto.setChecked(DroidPrefsUtils.statusComandoPorTexto(context));
+                if (sdk_int >= 21 && commandSwitch != null) {
+                    commandSwitch.setChecked(DroidPrefsUtils.statusComandoPorTexto(context));
                 }
+                RefreshStorageSummary();
             }
 
             if (startupServiceRequested && !serviceStarted) {
@@ -150,7 +379,7 @@ public class DroidConfigurationActivity extends PreferenceActivity {
         }
         catch (Exception ex)
         {
-            Log.d("DVR", ex.getMessage());
+            LogException("DVR", ex);
         }
     }
 
@@ -260,5 +489,18 @@ public class DroidConfigurationActivity extends PreferenceActivity {
             Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()));
             startActivity(intent);
         }
+    }
+
+    private int dp(int value) {
+        return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    private void SetTextSize(TextView textView, int dpSize) {
+        textView.setTextSize(TypedValue.COMPLEX_UNIT_PX, dp(dpSize));
+    }
+
+    private void LogException(String tag, Exception ex) {
+        String message = ex.getMessage();
+        Log.d(tag, message != null ? message : ex.toString());
     }
 }

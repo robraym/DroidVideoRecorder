@@ -26,6 +26,7 @@ public class DroidVideoRecorder {
     private static Uri currentVideoUri;
     private static ParcelFileDescriptor currentVideoFile;
     private static int currentCameraId = -1;
+    private static boolean mediaRecorderStarted;
 
     public static DroidConstants.EnumStateRecVideo StateRecVideo;
     public static DroidConstants.EnumTypeViewCam TypeViewCam;
@@ -91,7 +92,7 @@ public class DroidVideoRecorder {
             File myNewFolder = new File(pathStorage);
 
             if (!myNewFolder.exists()) {
-                myNewFolder.mkdir();
+                myNewFolder.mkdirs();
                 TimeSleep(1000);
             }
             if (myNewFolder.exists())
@@ -171,10 +172,15 @@ public class DroidVideoRecorder {
             try {
                 currentVideoFile.close();
             } catch (IOException ex) {
-                Log.d("StartRecording", ex.getMessage());
+                LogException("StartRecording", ex);
             }
             currentVideoFile = null;
         }
+    }
+
+    private static void LogException(String tag, Exception ex) {
+        String message = ex.getMessage();
+        Log.d(tag, message != null ? message : ex.toString());
     }
 
     private static int GetDisplayOrientationRec(int orientation)
@@ -309,7 +315,7 @@ public class DroidVideoRecorder {
         }
         catch (Exception ex)
         {
-            Log.d("ViewRec", ex.getMessage() );
+            LogException("ViewRec", ex);
         }
 
     }
@@ -329,15 +335,16 @@ public class DroidVideoRecorder {
         }
         catch (Exception ex)
         {
-            Log.d("ViewRec", ex.getMessage() );
+            LogException("ViewRec", ex);
         }
 
     }
 
 
-    public static void OnStartRecording(SurfaceHolder surfaceHolder, int orientation)
+    public static boolean OnStartRecording(SurfaceHolder surfaceHolder, int orientation)
     {
         try {
+            mediaRecorderStarted = false;
 
             mServiceCamera.unlock();
 
@@ -354,35 +361,49 @@ public class DroidVideoRecorder {
 
             mMediaRecorder.prepare();
             mMediaRecorder.start();
+            mediaRecorderStarted = true;
+            return true;
         }
         catch (Exception ex)
         {
-            Log.d("StartRecording", ex.getMessage() );
+            LogException("StartRecording", ex);
             DeleteCurrentVideoFile();
+            ResetRecord(false);
+            return false;
         }
     }
 
     private static void ResetRecord(boolean record)
     {
-        if (record && mMediaRecorder != null) {
+        if (record && mMediaRecorder != null && mediaRecorderStarted) {
             try {
                 mMediaRecorder.stop();
                 FinishCurrentVideoFile();
             } catch (Exception ex) {
-                Log.d("StopRecording", ex.getMessage());
+                LogException("StopRecording", ex);
                 DeleteCurrentVideoFile();
             }
+        } else if (record) {
+            DeleteCurrentVideoFile();
+        }
+
+        if (mMediaRecorder != null) {
             try {
                 mMediaRecorder.reset();
                 mMediaRecorder.release();
             } catch (Exception ex) {
-                Log.d("StopRecording", ex.getMessage());
+                LogException("StopRecording", ex);
             }
             mMediaRecorder = null;
+            mediaRecorderStarted = false;
         }
 
         if (mServiceCamera != null) {
-            mServiceCamera.stopPreview();
+            try {
+                mServiceCamera.stopPreview();
+            } catch (Exception ex) {
+                LogException("StopPreview", ex);
+            }
             mServiceCamera.release();
             mServiceCamera = null;
         }
@@ -392,10 +413,11 @@ public class DroidVideoRecorder {
     public static void OnStopRecording(boolean record) {
 
         try {
-            mServiceCamera.reconnect();
-        } catch (IOException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
+            if (mServiceCamera != null) {
+                mServiceCamera.reconnect();
+            }
+        } catch (IOException ex) {
+            LogException("StopRecording", ex);
         }
         ResetRecord(record);
     }

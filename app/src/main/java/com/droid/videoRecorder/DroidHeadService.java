@@ -198,7 +198,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         Notification.Builder builder = new Notification.Builder(this)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle(getString(R.string.app_name))
-                .setContentText("Gravador ativo")
+                .setContentText(getString(R.string.notification_ready_to_record))
                 .setContentIntent(pendingIntent)
                 .setOngoing(true);
 
@@ -509,7 +509,10 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         chatHead.setImageResource(R.mipmap.rec);
         SetPreviewFullScreen(false);
         DroidVideoRecorder.OnInitRec(getResources().getConfiguration(), orientationEvent, DroidVideoRecorder.TypeViewCam);
-        DroidVideoRecorder.OnStartRecording(mSurfaceView.getHolder(), orientationEvent);
+        if (!DroidVideoRecorder.OnStartRecording(mSurfaceView.getHolder(), orientationEvent)) {
+            ShowStopRecord(false);
+            return;
+        }
         DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.RECORD;
         Vibrar(50);
         if (DroidPrefsUtils.exibeTempoGravacao(this)) {

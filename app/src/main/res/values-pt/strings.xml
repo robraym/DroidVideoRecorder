@@ -3,10 +3,10 @@
     <string name="app_name">Video Recorder</string>
     <string name="txt_titulo">Configurações</string>
     <string name="txt_tela_Config">TELA DE CONFIGURAÇÕES</string>
-    <string name="spf_exibe_iniciar">Exibe a tela de configurações ao iniciar?</string>
-    <string name="spf_exibe_tempo_gravacao">Exibe tempo de gravação?</string>
-    <string name="spf_titulo">Tempo</string>
-    <string name="txt_gravacao_videos">Local da gravação dos videos</string>
+    <string name="spf_exibe_iniciar">Mostrar esta tela ao abrir o app</string>
+    <string name="spf_exibe_tempo_gravacao">Mostrar contador durante a gravação</string>
+    <string name="spf_titulo">Contador de gravação</string>
+    <string name="txt_gravacao_videos">Salvar vídeos em</string>
     <string name="txt_local_gravacao_videos">Interno</string>
     <string name="parando">Parando</string>
     <string name="visualizando">Visualizando</string>
@@ -19,10 +19,10 @@
     <string name="sair">sair</string>
     <string name="naoEntendi">Não entendi o que você disse</string>
     <string name="parandoGravacao">Parando a gravação</string>
-    <string name="leComando">Lê os comandos</string>
-    <string name="aceitaComandoPorTexto">Aceita comando por texto</string>
-    <string name="comando">Comando</string>
-    <string name="fala">Fala</string>
+    <string name="leComando">Ler comandos em voz alta</string>
+    <string name="aceitaComandoPorTexto">Permitir comandos recebidos por texto</string>
+    <string name="comando">Comandos por texto</string>
+    <string name="fala">Retorno por voz</string>
     <string name="abrindoDVR">Abrindo DVR</string>
     <string name="abrindoDVRConfig">Abrindo DVR com a tela de configuração</string>
     <string name="visualizandoCameraFronta">Visualizando com a câmera frontal</string>
@@ -32,4 +32,5 @@
     <string name="modoVisivel">modo visível</string>
     <string name="voltar">voltar</string>
     <string name="gravandoModoOculto">Gravando em modo oculto</string>
+    <string name="notification_ready_to_record">Pronto para gravar</string>
 </resources>
