@@ -65,17 +65,6 @@ public class DroidPrefsUtils {
 
     }
 
-    public static boolean aceitaComandoPorVoz(final Context context) {
-        boolean spf = false;
-        try {
-            SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
-            spf = sp.getBoolean("spf_aceitaComandoPorVoz", false);
-        } catch (Exception ex) {
-            Log.d("DroidVideo", ex.getMessage());
-        }
-        return spf;
-    }
-
     public static boolean statusComandoPorTexto(final Context context) {
         boolean spf = false;
         try {

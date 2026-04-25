@@ -1,9 +1,12 @@
 package com.droid.videoRecorder;
 
 import android.app.Notification;
+import android.content.ComponentName;
 import android.content.Intent;
 import android.os.Bundle;
 import android.service.notification.StatusBarNotification;
+
+import java.util.Locale;
 
 /**
  * Created by Robson on 03/02/2016.
@@ -11,58 +14,80 @@ import android.service.notification.StatusBarNotification;
 
 public class DroidNotification extends DroidBaseNotification {
 
-    private boolean sentBroadcast = false;
+    private String lastCommand = "";
+    private long lastCommandTime;
 
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
-        String msgNotification = getNotificationKitKat(sbn);
+        String msgNotification = getCommandFromNotification(sbn);
 
         if (!msgNotification.isEmpty()) {
-            cancelAllNotifications();
-            if (!sentBroadcast) {
+            long now = System.currentTimeMillis();
+            if (!msgNotification.equals(lastCommand) || now - lastCommandTime > 2000) {
                 SendBroadCast(msgNotification);
+                lastCommand = msgNotification;
+                lastCommandTime = now;
             }
         }
     }
 
     @Override
     public void onNotificationRemoved(StatusBarNotification sbn) {
-        sentBroadcast = false;
+        lastCommand = "";
+        lastCommandTime = 0;
     }
 
     private void SendBroadCast(String msgNotification) {
         Intent mIntent = new Intent();
         mIntent.setAction(DroidConstants.CHAVERECEIVER);
+        mIntent.setComponent(new ComponentName(this, DroidReceiver.class));
         mIntent.addCategory(Intent.CATEGORY_DEFAULT);
         mIntent.putExtra(DroidConstants.CHAVERECEIVER, msgNotification);
         sendBroadcast(mIntent);
-        sentBroadcast = true;
     }
 
-    private String getNotificationKitKat(StatusBarNotification mStatusBarNotification) {
-        String pack = mStatusBarNotification.getPackageName();// Package Name
+    private String getCommandFromNotification(StatusBarNotification mStatusBarNotification) {
         Bundle extras = mStatusBarNotification.getNotification().extras;
-        CharSequence tit = extras.getCharSequence(Notification.EXTRA_TITLE); // Title
-        CharSequence desc = extras.getCharSequence(Notification.EXTRA_TEXT); // / Description
-        String msg = "";
+        StringBuilder notificationText = new StringBuilder();
 
-        try {
-            Bundle bigExtras = mStatusBarNotification.getNotification().extras;
-            CharSequence[] descArray = bigExtras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES);
-            msg = descArray[descArray.length - 1].toString();
+        append(notificationText, extras.getCharSequence(Notification.EXTRA_TITLE));
+        append(notificationText, extras.getCharSequence(Notification.EXTRA_TEXT));
+        append(notificationText, extras.getCharSequence(Notification.EXTRA_BIG_TEXT));
+        append(notificationText, extras.getCharSequence(Notification.EXTRA_SUB_TEXT));
 
-        } catch (Exception ex) {
-
+        CharSequence[] descArray = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES);
+        if (descArray != null) {
+            for (CharSequence line : descArray) {
+                append(notificationText, line);
+            }
         }
 
-        if (msg.isEmpty()) {
-            msg = desc.toString();
-        }
-        String msgCMD = msg.substring(0, DroidConstants.COMANDOINICIADOPOR.length());
+        return findCommand(notificationText.toString());
+    }
 
-        if (DroidConstants.COMANDOINICIADOPOR.equalsIgnoreCase(msgCMD)) {
-            return msg;
-        } else return "";
+    private void append(StringBuilder builder, CharSequence value) {
+        if (value != null) {
+            builder.append(' ').append(value);
+        }
+    }
+
+    private String findCommand(String text) {
+        if (text == null) {
+            return "";
+        }
+
+        String normalized = text.toUpperCase(Locale.US)
+                .replace('\n', ' ')
+                .replace('\r', ' ');
+        String[] commands = {"MIR", "CFG", "MI", "MV", "D", "R", "S", "V", "C", "Q"};
+
+        for (String command : commands) {
+            if (normalized.contains("DVR=" + command) || normalized.contains("DVR" + command)) {
+                return DroidConstants.COMANDOINICIADOPOR + command;
+            }
+        }
+
+        return "";
     }
 
 }

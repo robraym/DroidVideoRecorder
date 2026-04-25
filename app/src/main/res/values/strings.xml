@@ -24,9 +24,7 @@
     <string name="naoEntendi">Did not understand what you said</string>
     <string name="parandoGravacao">Stop Recording</string>
     <string name="leComando">Read the commands</string>
-    <string name="aceitaComandoPorVoz">Supports voice control</string>
     <string name="aceitaComandoPorTexto">Accepts command by text</string>
-    <string name="escuta">Listening</string>
     <string name="comando">Command</string>
     <string name="fala">Speaks</string>
     <string name="abrindoDVR">Opening DVR</string>

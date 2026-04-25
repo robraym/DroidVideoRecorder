@@ -1,5 +1,6 @@
 package com.droid.videoRecorder;
 
+import android.content.Context;
 import android.content.res.Configuration;
 import android.hardware.Camera;
 import android.media.CamcorderProfile;
@@ -16,10 +17,15 @@ import android.util.Log;
 public class DroidVideoRecorder {
     private static Camera mServiceCamera;
     private static MediaRecorder mMediaRecorder;
+    private static Context appContext;
 
     public static DroidConstants.EnumStateRecVideo StateRecVideo;
     public static DroidConstants.EnumTypeViewCam TypeViewCam;
     public static int LocalGravacaoVideo = 0;
+
+    public static void SetContext(Context context) {
+        appContext = context.getApplicationContext();
+    }
 
     private static void TimeSleep(Integer seg) {
         try {
@@ -50,8 +56,17 @@ public class DroidVideoRecorder {
         } catch (Exception e) {
         } finally {
             if (strSDCardPath == "" || strDirectory == "") {
-                strSDCardPath = Environment.getExternalStorageDirectory().toString();
-                strDirectory = CreateGetDirectory(strSDCardPath + DroidConstants.PASTADOSARQUIVOSGRAVADOS);
+                if (appContext != null) {
+                    File directory = appContext.getExternalFilesDir(Environment.DIRECTORY_MOVIES);
+                    if (directory != null) {
+                        strDirectory = CreateGetDirectory(directory.getAbsolutePath());
+                    }
+                }
+
+                if (strDirectory == "") {
+                    strSDCardPath = Environment.getExternalStorageDirectory().toString();
+                    strDirectory = CreateGetDirectory(strSDCardPath + DroidConstants.PASTADOSARQUIVOSGRAVADOS);
+                }
             }
         }
         return strDirectory;

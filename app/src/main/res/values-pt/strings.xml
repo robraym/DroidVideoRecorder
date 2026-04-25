@@ -24,9 +24,7 @@
     <string name="naoEntendi">Não entendi o que você disse</string>
     <string name="parandoGravacao">Parando a gravação</string>
     <string name="leComando">Lê os comandos</string>
-    <string name="aceitaComandoPorVoz">Aceita comando por voz</string>
     <string name="aceitaComandoPorTexto">Aceita comando por texto</string>
-    <string name="escuta">Escuta</string>
     <string name="comando">Comando</string>
     <string name="fala">Fala</string>
     <string name="abrindoDVR">Abrindo DVR</string>

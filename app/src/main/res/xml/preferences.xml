@@ -41,12 +41,6 @@
 
         <SwitchPreference
             android:defaultValue="false"
-            android:key="spf_aceitaComandoPorVoz"
-            android:summary="@string/aceitaComandoPorVoz"
-            android:title="@string/escuta"></SwitchPreference>
-
-        <SwitchPreference
-            android:defaultValue="false"
             android:key="spf_aceitaComandoPorTexto"
             android:summary="@string/aceitaComandoPorTexto"
             android:title="@string/comando"></SwitchPreference>
