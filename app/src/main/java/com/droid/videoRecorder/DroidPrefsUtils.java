@@ -6,13 +6,10 @@ import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Environment;
 import android.preference.PreferenceManager;
-import android.preference.SwitchPreference;
 import android.provider.Settings;
 import android.util.Log;
 
 import java.io.File;
-import java.util.ResourceBundle;
-import java.util.Set;
 
 /**
  * Created by Robson on 12/01/2016.
@@ -120,21 +117,6 @@ public class DroidPrefsUtils {
             Log.d("DroidVideo", ex.getMessage());
         }
         return spf;
-
-    }
-
-    public static int obtemQualidadeCamera(final Context context, DroidConstants.EnumTypeViewCam typeViewCam) {
-        int qualid = 0; // QUALITY_LOW
-        try {
-            SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
-            if (typeViewCam == DroidConstants.EnumTypeViewCam.FacingFront) {
-                qualid = Integer.parseInt(sp.getString("ltp_qualidadeCameraFrontal", "0"));
-            } else qualid = Integer.parseInt(sp.getString("ltp_qualidadeCameraTraseira", "0"));
-
-        } catch (Exception ex) {
-            Log.d("DroidVideo", ex.getMessage());
-        }
-        return qualid;
 
     }
 

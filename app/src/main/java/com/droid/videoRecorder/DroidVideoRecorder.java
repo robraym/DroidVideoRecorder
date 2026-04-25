@@ -25,10 +25,19 @@ public class DroidVideoRecorder {
     private static Context appContext;
     private static Uri currentVideoUri;
     private static ParcelFileDescriptor currentVideoFile;
+    private static int currentCameraId = -1;
 
     public static DroidConstants.EnumStateRecVideo StateRecVideo;
     public static DroidConstants.EnumTypeViewCam TypeViewCam;
     public static int LocalGravacaoVideo = 0;
+    private static final int[] BEST_VIDEO_QUALITIES = new int[]{
+            CamcorderProfile.QUALITY_2160P,
+            CamcorderProfile.QUALITY_1080P,
+            CamcorderProfile.QUALITY_720P,
+            CamcorderProfile.QUALITY_480P,
+            CamcorderProfile.QUALITY_HIGH,
+            CamcorderProfile.QUALITY_LOW
+    };
 
     public static void SetContext(Context context) {
         appContext = context.getApplicationContext();
@@ -223,17 +232,54 @@ public class DroidVideoRecorder {
         return displayOrient;
     }
 
+    private static int FindCameraId(int cameraFacing) {
+        Camera.CameraInfo cameraInfo = new Camera.CameraInfo();
+        for (int i = 0; i < Camera.getNumberOfCameras(); i++) {
+            Camera.getCameraInfo(i, cameraInfo);
+            if (cameraInfo.facing == cameraFacing) {
+                return i;
+            }
+        }
+        return 0;
+    }
+
+    private static CamcorderProfile GetBestCamcorderProfile() {
+        int cameraId = currentCameraId >= 0 ? currentCameraId : 0;
+        for (int quality : BEST_VIDEO_QUALITIES) {
+            if (CamcorderProfile.hasProfile(cameraId, quality)) {
+                Log.d("DVR", "Qualidade de video automatica: " + quality);
+                return CamcorderProfile.get(cameraId, quality);
+            }
+        }
+        return CamcorderProfile.get(cameraId, CamcorderProfile.QUALITY_LOW);
+    }
+
+    private static void ConfigureFocus(Camera.Parameters parameters) {
+        List<String> supportedFocusModes = parameters.getSupportedFocusModes();
+        if (supportedFocusModes == null) {
+            return;
+        }
+
+        if (supportedFocusModes.contains(Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO)) {
+            parameters.setFocusMode(Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO);
+            return;
+        }
+
+        if (supportedFocusModes.contains(Camera.Parameters.FOCUS_MODE_AUTO)) {
+            parameters.setFocusMode(Camera.Parameters.FOCUS_MODE_AUTO);
+        }
+    }
+
     public static void OnInitRec (Configuration orient, int orientation, DroidConstants.EnumTypeViewCam typeViewCam)
     {
         try {
-            int currentCameraId;
             if (typeViewCam == DroidConstants.EnumTypeViewCam.FacingFront)
             {
-                currentCameraId=Camera.CameraInfo.CAMERA_FACING_FRONT;
+                currentCameraId = FindCameraId(Camera.CameraInfo.CAMERA_FACING_FRONT);
                 TypeViewCam = DroidConstants.EnumTypeViewCam.FacingFront;
             }
             else {
-                currentCameraId = Camera.CameraInfo.CAMERA_FACING_BACK;
+                currentCameraId = FindCameraId(Camera.CameraInfo.CAMERA_FACING_BACK);
                 TypeViewCam = DroidConstants.EnumTypeViewCam.FacingBack;
             }
 
@@ -253,6 +299,7 @@ public class DroidVideoRecorder {
 
                 mServiceCamera.setDisplayOrientation(GetDisplayOrientationView(orient, orientation));
 
+                ConfigureFocus(p);
                 p.setPreviewSize(previewWidth, previewHeight);
                 mServiceCamera.setParameters(p);
             }
@@ -274,6 +321,7 @@ public class DroidVideoRecorder {
             try {
                 mServiceCamera.setPreviewDisplay(surfaceHolder);
                 mServiceCamera.startPreview();
+                mServiceCamera.cancelAutoFocus();
             }
             catch (IOException e) {
                 // TODO Auto-generated catch block
@@ -287,7 +335,7 @@ public class DroidVideoRecorder {
     }
 
 
-    public static void OnStartRecording(SurfaceHolder surfaceHolder, int orientation, int qualidadeCamera)
+    public static void OnStartRecording(SurfaceHolder surfaceHolder, int orientation)
     {
         try {
 
@@ -299,7 +347,7 @@ public class DroidVideoRecorder {
             mMediaRecorder.setVideoSource(MediaRecorder.VideoSource.CAMERA);
             SetOutputFile(mMediaRecorder);
 
-            mMediaRecorder.setProfile(CamcorderProfile.get(qualidadeCamera));
+            mMediaRecorder.setProfile(GetBestCamcorderProfile());
 
             mMediaRecorder.setPreviewDisplay(surfaceHolder.getSurface());
             mMediaRecorder.setOrientationHint(GetDisplayOrientationRec(orientation));

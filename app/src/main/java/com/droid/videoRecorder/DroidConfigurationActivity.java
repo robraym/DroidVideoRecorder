@@ -10,9 +10,6 @@ import android.os.Bundle;
 import android.preference.ListPreference;
 import android.preference.Preference;
 import android.preference.PreferenceActivity;
-import android.preference.PreferenceCategory;
-import android.preference.PreferenceManager;
-import android.preference.PreferenceScreen;
 import android.preference.SwitchPreference;
 import android.provider.Settings;
 import android.util.Log;
@@ -25,8 +22,6 @@ public class DroidConfigurationActivity extends PreferenceActivity {
     private static final int REQUEST_RUNTIME_PERMISSIONS = 1001;
 
     private Context context;
-    private ListPreference ltp_qualidadeCameraFrontal;
-    private ListPreference ltp_qualidadeCameraTraseira;
     private ListPreference ltp_localGravacaoVideo;
     private SwitchPreference spf_aceitaComandoPorTexto;
     private boolean canFinish;
@@ -68,26 +63,6 @@ public class DroidConfigurationActivity extends PreferenceActivity {
 
         if (exibeTelaInicial || chamadaPeloServico || chamadaConfigPorComandoTexto) {
             addPreferencesFromResource(R.xml.preferences);
-
-            ltp_qualidadeCameraFrontal = (ListPreference) findPreference("ltp_qualidadeCameraFrontal");
-            ltp_qualidadeCameraFrontal.setSummary(DroidPrefsUtils.obtemDescricaoPreferencias(context, String.valueOf(DroidPrefsUtils.obtemQualidadeCamera(context, DroidConstants.EnumTypeViewCam.FacingFront)), R.array.qualidadeCameraFrontal, R.array.valor_qualidadeCameraFrontal));
-            ltp_qualidadeCameraFrontal.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
-                @Override
-                public boolean onPreferenceChange(Preference preference, Object newValue) {
-                    preference.setSummary(DroidPrefsUtils.obtemDescricaoPreferencias(context, newValue.toString(), R.array.qualidadeCameraFrontal, R.array.valor_qualidadeCameraFrontal));
-                    return true;
-                }
-            });
-
-            ltp_qualidadeCameraTraseira = (ListPreference) findPreference("ltp_qualidadeCameraTraseira");
-            ltp_qualidadeCameraTraseira.setSummary(DroidPrefsUtils.obtemDescricaoPreferencias(context, String.valueOf(DroidPrefsUtils.obtemQualidadeCamera(context, DroidConstants.EnumTypeViewCam.FacingBack)), R.array.qualidadeCameraTraseira, R.array.valor_qualidadeCameraTraseira));
-            ltp_qualidadeCameraTraseira.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
-                @Override
-                public boolean onPreferenceChange(Preference preference, Object newValue) {
-                    preference.setSummary(DroidPrefsUtils.obtemDescricaoPreferencias(context, newValue.toString(), R.array.qualidadeCameraTraseira, R.array.valor_qualidadeCameraTraseira));
-                    return true;
-                }
-            });
 
             ltp_localGravacaoVideo = (ListPreference) findPreference("ltp_localGravacaoVideo");
             ConfigurarLocaisGravacao();

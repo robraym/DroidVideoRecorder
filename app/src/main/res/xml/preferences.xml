@@ -17,22 +17,6 @@
 
         <ListPreference
             android:defaultValue="0"
-            android:entries="@array/qualidadeCameraTraseira"
-            android:entryValues="@array/valor_qualidadeCameraTraseira"
-            android:key="ltp_qualidadeCameraTraseira"
-            android:summary="@string/txt_qualidade_camera_traseira"
-            android:title="@string/txt_camera_traseira"></ListPreference>
-
-        <ListPreference
-            android:defaultValue="0"
-            android:entries="@array/qualidadeCameraFrontal"
-            android:entryValues="@array/valor_qualidadeCameraFrontal"
-            android:key="ltp_qualidadeCameraFrontal"
-            android:summary="@string/txt_qualidade_camera_frontal"
-            android:title="@string/txt_camera_frontal"></ListPreference>
-
-        <ListPreference
-            android:defaultValue="0"
             android:entries="@array/localArquivosGravados"
             android:entryValues="@array/valor_localArquivosGravados"
             android:key="ltp_localGravacaoVideo"

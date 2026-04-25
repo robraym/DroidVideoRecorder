@@ -509,7 +509,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         chatHead.setImageResource(R.mipmap.rec);
         SetPreviewFullScreen(false);
         DroidVideoRecorder.OnInitRec(getResources().getConfiguration(), orientationEvent, DroidVideoRecorder.TypeViewCam);
-        DroidVideoRecorder.OnStartRecording(mSurfaceView.getHolder(), orientationEvent, DroidPrefsUtils.obtemQualidadeCamera(this, DroidConstants.EnumTypeViewCam.FacingBack));
+        DroidVideoRecorder.OnStartRecording(mSurfaceView.getHolder(), orientationEvent);
         DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.RECORD;
         Vibrar(50);
         if (DroidPrefsUtils.exibeTempoGravacao(this)) {

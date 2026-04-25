@@ -4,10 +4,6 @@
     <string name="txt_titulo">Settings</string>
     <string name="txt_tela_Config">SETTINGS SCREEN</string>
     <string name="spf_exibe_iniciar">Displays the settings screen to start?</string>
-    <string name="txt_qualidade_camera_traseira">Low</string>
-    <string name="txt_qualidade_camera_frontal">Low</string>
-    <string name="txt_camera_traseira">Back camera quality</string>
-    <string name="txt_camera_frontal">Front camera quality</string>
     <string name="spf_exibe_tempo_gravacao">Displays recording rate?</string>
     <string name="spf_titulo">Time</string>
     <string name="txt_gravacao_videos">Local recording of videos</string>
