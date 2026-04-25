@@ -9,6 +9,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.PixelFormat;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.*;
 import android.speech.tts.TextToSpeech;
@@ -22,9 +25,12 @@ import java.util.ArrayList;
 import java.util.Locale;
 
 
-public class DroidHeadService extends Service implements TextToSpeech.OnInitListener {
+public class DroidHeadService extends Service implements TextToSpeech.OnInitListener, SensorEventListener {
     private static final int FOREGROUND_NOTIFICATION_ID = 100;
     private static final String NOTIFICATION_CHANNEL_ID = "droid_video_recorder_service";
+    private static final float TWIST_THRESHOLD = 5.5f;
+    private static final long TWIST_SEQUENCE_TIMEOUT_MS = 900;
+    private static final long TWIST_COOLDOWN_MS = 1800;
 
     private WindowManager windowManager;
     private ImageView chatHead;
@@ -42,6 +48,12 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     private boolean pendingPreview;
     private DroidConstants.EnumTypeViewCam pendingPreviewCam = DroidConstants.EnumTypeViewCam.FacingBack;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private SensorManager sensorManager;
+    private Sensor gyroscopeSensor;
+    private int lastTwistDirection;
+    private int twistCount;
+    private long lastTwistMoveTime;
+    private long lastTwistCommandTime;
 
     private boolean necessarioComandoDepoisDoInit = false;
     private Intent mIntentService;
@@ -151,6 +163,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         if (chatHead != null) windowManager.removeView(chatHead);
         if (txtHead != null) windowManager.removeView(txtHead);
         if (mSurfaceView != null) windowManager.removeView(mSurfaceView);
+        if (sensorManager != null) sensorManager.unregisterListener(this);
         Vibrar(100);
     }
 
@@ -267,6 +280,15 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     private void InicializarAcao() {
         txtHead.setOnTouchListener(onTouchListener);
         chatHead.setOnTouchListener(onTouchListener);
+        sensorManager = (SensorManager) context.getSystemService(SENSOR_SERVICE);
+        if (sensorManager != null) {
+            gyroscopeSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
+            if (gyroscopeSensor != null) {
+                sensorManager.registerListener(this, gyroscopeSensor, SensorManager.SENSOR_DELAY_GAME);
+            } else {
+                Log.d("DVR", "Giroscopio nao encontrado para gesto de gravacao");
+            }
+        }
 
         myOrientationEventListener = new OrientationEventListener(context, SensorManager.SENSOR_DELAY_NORMAL) {
             @Override
@@ -276,6 +298,59 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             }
         };
 
+    }
+
+    @Override
+    public void onSensorChanged(SensorEvent event) {
+        if (event.sensor.getType() != Sensor.TYPE_GYROSCOPE) {
+            return;
+        }
+
+        float rotationX = event.values[0];
+        float rotationY = event.values[1];
+        float dominantRotation = Math.abs(rotationY) >= Math.abs(rotationX) ? rotationY : rotationX;
+
+        if (Math.abs(dominantRotation) < TWIST_THRESHOLD) {
+            return;
+        }
+
+        long now = SystemClock.elapsedRealtime();
+        if (now - lastTwistCommandTime < TWIST_COOLDOWN_MS) {
+            return;
+        }
+
+        int direction = dominantRotation > 0 ? 1 : -1;
+        if (now - lastTwistMoveTime > TWIST_SEQUENCE_TIMEOUT_MS) {
+            twistCount = 0;
+            lastTwistDirection = 0;
+        }
+
+        if (direction != lastTwistDirection) {
+            twistCount++;
+            lastTwistDirection = direction;
+            lastTwistMoveTime = now;
+        }
+
+        if (twistCount >= 2) {
+            twistCount = 0;
+            lastTwistDirection = 0;
+            lastTwistCommandTime = now;
+            ExecutarGestoGravacao();
+        }
+    }
+
+    @Override
+    public void onAccuracyChanged(Sensor sensor, int accuracy) {
+        // Not used
+    }
+
+    private void ExecutarGestoGravacao() {
+        Log.d("DVR", "Gesto de giro detectado");
+        if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.RECORD) {
+            PararEFechar();
+        } else {
+            Gravar();
+        }
     }
 
     private void StopService() {
@@ -338,6 +413,14 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         if (Permite(DroidVideoRecorder.StateRecVideo.STOP)) {
             Fala(getString(R.string.parandoGravacao));
             ShowStopRecord(true);
+        }
+    }
+
+    private void PararEFechar() {
+        if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.RECORD) {
+            Fala(getString(R.string.parandoGravacao));
+            ShowStopRecord(true);
+            StopService();
         }
     }
 
