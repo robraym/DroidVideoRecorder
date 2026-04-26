@@ -47,6 +47,12 @@ public class DroidConfigurationActivity extends Activity {
     private static final int COLOR_PRIMARY_TEXT = Color.rgb(248, 248, 250);
     private static final int COLOR_SECONDARY_TEXT = Color.rgb(180, 182, 190);
     private static final int COLOR_DIVIDER = Color.rgb(52, 53, 58);
+    private static final int COLOR_DIALOG = Color.rgb(34, 35, 39);
+    private static final int COLOR_ACCENT = Color.rgb(66, 133, 244);
+    private static final int COLOR_ICON_BLUE = Color.rgb(45, 101, 214);
+    private static final int COLOR_ICON_GREEN = Color.rgb(28, 145, 96);
+    private static final int COLOR_ICON_PURPLE = Color.rgb(121, 88, 230);
+    private static final int COLOR_ICON_ORANGE = Color.rgb(202, 118, 36);
 
     private boolean ExibeTelaInicial() {
         return DroidPrefsUtils.exibeTelaInicial(context);
@@ -120,6 +126,8 @@ public class DroidConfigurationActivity extends Activity {
 
         LinearLayout generalGroup = CreateGroup();
         generalGroup.addView(CreateSwitchRow(
+                "A",
+                COLOR_ICON_BLUE,
                 getString(R.string.txt_titulo),
                 getString(R.string.spf_exibe_iniciar),
                 "spf_exibeAoIniciar",
@@ -129,6 +137,8 @@ public class DroidConfigurationActivity extends Activity {
         generalGroup.addView(CreateDivider());
 
         generalGroup.addView(CreateSwitchRow(
+                "T",
+                COLOR_ICON_GREEN,
                 getString(R.string.spf_titulo),
                 getString(R.string.spf_exibe_tempo_gravacao),
                 "spf_exibeTempoGravacao",
@@ -148,6 +158,8 @@ public class DroidConfigurationActivity extends Activity {
         commandGroup.setLayoutParams(commandParams);
 
         commandGroup.addView(CreateSwitchRow(
+                "C",
+                COLOR_ICON_PURPLE,
                 getString(R.string.comando),
                 getString(R.string.aceitaComandoPorTexto),
                 "spf_aceitaComandoPorTexto",
@@ -170,6 +182,8 @@ public class DroidConfigurationActivity extends Activity {
         commandGroup.addView(CreateDivider());
 
         commandGroup.addView(CreateSwitchRow(
+                "V",
+                COLOR_ICON_ORANGE,
                 getString(R.string.fala),
                 getString(R.string.leComando),
                 "spf_leComando",
@@ -182,10 +196,13 @@ public class DroidConfigurationActivity extends Activity {
         RefreshStorageSummary();
     }
 
-    private View CreateSwitchRow(String title, String summary, final String key, boolean defaultValue, boolean enabled,
+    private View CreateSwitchRow(String iconText, int iconColor, String title, String summary,
+                                  final String key, boolean defaultValue, boolean enabled,
                                   CompoundButton.OnCheckedChangeListener extraListener) {
         LinearLayout row = CreateRow();
         row.setEnabled(enabled);
+
+        row.addView(CreateIcon(iconText, iconColor, enabled));
 
         LinearLayout texts = CreateTexts(title, summary);
         row.addView(texts, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
@@ -223,6 +240,8 @@ public class DroidConfigurationActivity extends Activity {
 
     private View CreateStorageRow() {
         LinearLayout row = CreateRow();
+        row.addView(CreateIcon("S", COLOR_ICON_ORANGE, true));
+
         LinearLayout texts = CreateTexts(getString(R.string.txt_gravacao_videos), "");
         storageSummary = (TextView) texts.getChildAt(1);
         row.addView(texts, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
@@ -241,6 +260,22 @@ public class DroidConfigurationActivity extends Activity {
             }
         });
         return row;
+    }
+
+    private TextView CreateIcon(String text, int color, boolean enabled) {
+        TextView icon = new TextView(this);
+        icon.setText(text);
+        icon.setTextColor(COLOR_PRIMARY_TEXT);
+        icon.setGravity(Gravity.CENTER);
+        icon.setTypeface(Typeface.DEFAULT_BOLD);
+        SetTextSize(icon, 14);
+        icon.setBackground(CreateOvalBackground(enabled ? color : Color.rgb(74, 75, 82)));
+
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(36), dp(36));
+        params.setMargins(0, 0, dp(14), 0);
+        icon.setLayoutParams(params);
+        icon.setAlpha(enabled ? 1.0f : 0.55f);
+        return icon;
     }
 
     private LinearLayout CreateRow() {
@@ -273,6 +308,13 @@ public class DroidConfigurationActivity extends Activity {
         GradientDrawable drawable = new GradientDrawable();
         drawable.setColor(color);
         drawable.setCornerRadius(dp(radiusDp));
+        return drawable;
+    }
+
+    private GradientDrawable CreateOvalBackground(int color) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setShape(GradientDrawable.OVAL);
+        drawable.setColor(color);
         return drawable;
     }
 
@@ -312,7 +354,7 @@ public class DroidConfigurationActivity extends Activity {
         };
 
         rowSwitch.setThumbTintList(new ColorStateList(states, new int[]{
-                Color.rgb(66, 133, 244),
+                COLOR_ACCENT,
                 Color.rgb(120, 123, 132),
                 Color.rgb(232, 234, 237)
         }));
@@ -332,14 +374,70 @@ public class DroidConfigurationActivity extends Activity {
                 ? getResources().getStringArray(R.array.valor_localArquivosGravados)
                 : new String[]{"0"};
 
-        new AlertDialog.Builder(this)
-                .setTitle(getString(R.string.txt_gravacao_videos))
-                .setItems(entries, (dialog, which) -> {
-                    preferences.edit().putString("ltp_localGravacaoVideo", values[which]).apply();
-                    DroidVideoRecorder.LocalGravacaoVideo = Integer.parseInt(values[which]);
-                    RefreshStorageSummary();
-                })
-                .show();
+        LinearLayout dialogContent = new LinearLayout(this);
+        dialogContent.setOrientation(LinearLayout.VERTICAL);
+        dialogContent.setPadding(dp(22), dp(20), dp(22), dp(12));
+        dialogContent.setBackground(CreateRoundedBackground(COLOR_DIALOG, 24));
+
+        TextView title = new TextView(this);
+        title.setText(getString(R.string.txt_gravacao_videos));
+        title.setTextColor(COLOR_PRIMARY_TEXT);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        SetTextSize(title, 20);
+        title.setPadding(0, 0, 0, dp(12));
+        dialogContent.addView(title);
+
+        final AlertDialog dialog = new AlertDialog.Builder(this)
+                .setView(dialogContent)
+                .create();
+
+        for (int i = 0; i < entries.length; i++) {
+            final int index = i;
+            View option = CreateDialogOption(entries[index], values[index], dialog);
+            dialogContent.addView(option);
+        }
+
+        dialog.setOnShowListener(dialogInterface -> {
+            if (dialog.getWindow() != null) {
+                dialog.getWindow().setBackgroundDrawable(CreateRoundedBackground(Color.TRANSPARENT, 24));
+            }
+        });
+        dialog.show();
+    }
+
+    private View CreateDialogOption(String label, String value, AlertDialog dialog) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(12), 0, dp(12));
+
+        int currentStorage = DroidPrefsUtils.obtemLocalGravacao(context);
+        row.addView(CreateIcon(String.valueOf(label.charAt(0)), COLOR_ICON_BLUE, true));
+
+        TextView optionText = new TextView(this);
+        optionText.setText(label);
+        optionText.setTextColor(COLOR_PRIMARY_TEXT);
+        optionText.setTypeface(String.valueOf(currentStorage).equals(value) ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+        SetTextSize(optionText, 16);
+        row.addView(optionText, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+
+        if (String.valueOf(currentStorage).equals(value)) {
+            TextView selected = new TextView(this);
+            selected.setText("OK");
+            selected.setTextColor(COLOR_ACCENT);
+            selected.setTypeface(Typeface.DEFAULT_BOLD);
+            SetTextSize(selected, 12);
+            row.addView(selected);
+        }
+
+        row.setOnClickListener(v -> {
+            preferences.edit().putString("ltp_localGravacaoVideo", value).apply();
+            DroidVideoRecorder.LocalGravacaoVideo = Integer.parseInt(value);
+            RefreshStorageSummary();
+            dialog.dismiss();
+        });
+
+        return row;
     }
 
     private void RefreshStorageSummary() {
