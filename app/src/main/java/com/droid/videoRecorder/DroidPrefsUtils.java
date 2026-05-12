@@ -16,6 +16,9 @@ import java.io.File;
  */
 
 public class DroidPrefsUtils {
+    private static final String PREF_ULTIMA_CAMERA = "spf_ultimaCamera";
+    private static final String CAMERA_FRONTAL = "front";
+    private static final String CAMERA_TRASEIRA = "back";
 
     public static boolean chamadaPorComandoTexto(final Intent intent) {
         boolean chamadaPorCmdTxt = false;
@@ -158,6 +161,30 @@ public class DroidPrefsUtils {
             Log.d("DroidVideo", ex.getMessage());
         }
         return false;
+    }
+
+    public static DroidConstants.EnumTypeViewCam obtemUltimaCamera(final Context context) {
+        DroidConstants.EnumTypeViewCam typeViewCam = DroidConstants.EnumTypeViewCam.FacingBack;
+        try {
+            SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
+            String camera = sp.getString(PREF_ULTIMA_CAMERA, CAMERA_TRASEIRA);
+            if (CAMERA_FRONTAL.equals(camera)) {
+                typeViewCam = DroidConstants.EnumTypeViewCam.FacingFront;
+            }
+        } catch (Exception ex) {
+            Log.d("DroidVideo", ex.getMessage());
+        }
+        return typeViewCam;
+    }
+
+    public static void salvaUltimaCamera(final Context context, DroidConstants.EnumTypeViewCam typeViewCam) {
+        try {
+            SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
+            String camera = typeViewCam == DroidConstants.EnumTypeViewCam.FacingFront ? CAMERA_FRONTAL : CAMERA_TRASEIRA;
+            sp.edit().putString(PREF_ULTIMA_CAMERA, camera).apply();
+        } catch (Exception ex) {
+            Log.d("DroidVideo", ex.getMessage());
+        }
     }
 
     public static String obtemDescricaoPreferencias(final Context context, String valor_selecionado, int nome_lista, int lista_valor) {

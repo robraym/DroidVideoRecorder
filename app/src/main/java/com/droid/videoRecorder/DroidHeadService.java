@@ -152,6 +152,8 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     @Override
     public void onCreate() {
         super.onCreate();
+        context = getBaseContext();
+        DroidVideoRecorder.TypeViewCam = DroidPrefsUtils.obtemUltimaCamera(context);
         serviceActive = true;
         Log.d("DVR", "DroidHeadService onCreate");
         StartForegroundServiceNotification();
@@ -357,9 +359,9 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         windowManager.addView(txtCameraBadge, params);
         tts = new TextToSpeech(context, this);
 
-        DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.STOP;
-        DroidVideoRecorder.TypeViewCam = DroidConstants.EnumTypeViewCam.FacingBack;
         DroidVideoRecorder.SetContext(context);
+        DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.STOP;
+        DroidVideoRecorder.TypeViewCam = DroidPrefsUtils.obtemUltimaCamera(context);
         DroidVideoRecorder.LocalGravacaoVideo = DroidPrefsUtils.obtemLocalGravacao(context);
         onTouchListener = new TouchListener();
         tts.setLanguage(Locale.getDefault());
@@ -541,13 +543,13 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     private void Visualizar() {
         if (Permite(DroidVideoRecorder.StateRecVideo.VIEW)) {
             Fala(getString(R.string.visualizando));
-            ShowView();
+            ShowViewChangingCamera();
         }
     }
 
     private void VisualizarTrocandoCamera() {
         if (Permite(DroidVideoRecorder.StateRecVideo.VIEW)) {
-            ShowStopRecord(false);
+            DroidVideoRecorder.OnStopRecording(false);
             ChangeTypeViewCam();
         }
     }
@@ -611,18 +613,31 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     private void ShowView() {
         chatHead.setImageResource(R.mipmap.viewrec);
         SetPreviewFullScreen(true);
-        StartPreview(DroidConstants.EnumTypeViewCam.FacingBack);
-        DroidVideoRecorder.TypeViewCam = DroidConstants.EnumTypeViewCam.FacingBack;
+        StartPreview(DroidVideoRecorder.TypeViewCam);
         DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.VIEW;
         UpdateNotification(GetViewingNotificationText());
         ShowCameraIndicator();
         Vibrar(100);
     }
 
+    private void ShowViewChangingCamera() {
+        ChangeSavedTypeViewCam();
+        ShowView();
+    }
+
     private void ChangeTypeViewCam() {
         chatHead.setImageResource(R.mipmap.viewrec);
         SetPreviewFullScreen(true);
 
+        ChangeSavedTypeViewCam();
+        StartPreview(DroidVideoRecorder.TypeViewCam);
+        DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.VIEW;
+        UpdateNotification(GetViewingNotificationText());
+        ShowCameraIndicator();
+        Vibrar(100);
+    }
+
+    private void ChangeSavedTypeViewCam() {
         if (DroidVideoRecorder.TypeViewCam == DroidConstants.EnumTypeViewCam.FacingBack) {
             Fala(getString(R.string.visualizandoCameraFronta));
             DroidVideoRecorder.TypeViewCam = DroidConstants.EnumTypeViewCam.FacingFront;
@@ -631,11 +646,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             DroidVideoRecorder.TypeViewCam = DroidConstants.EnumTypeViewCam.FacingBack;
         }
 
-        StartPreview(DroidVideoRecorder.TypeViewCam);
-        DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.VIEW;
-        UpdateNotification(GetViewingNotificationText());
-        ShowCameraIndicator();
-        Vibrar(100);
+        DroidPrefsUtils.salvaUltimaCamera(context, DroidVideoRecorder.TypeViewCam);
     }
 
     private void ShowRec() {
@@ -669,8 +680,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         SetPreviewFullScreen(false);
         chatHead.setImageResource(R.mipmap.stoprec);
         DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.STOP;
-        DroidVideoRecorder.OnInitRec(getResources().getConfiguration(), orientationEvent, DroidConstants.EnumTypeViewCam.FacingBack);
-        DroidVideoRecorder.TypeViewCam = DroidConstants.EnumTypeViewCam.FacingBack;
+        DroidVideoRecorder.OnInitRec(getResources().getConfiguration(), orientationEvent, DroidVideoRecorder.TypeViewCam);
         DroidVideoRecorder.OnViewRec(mSurfaceView.getHolder());
         DroidVideoRecorder.OnStopRecording(false);
         UpdateNotification(GetReadyNotificationText());
