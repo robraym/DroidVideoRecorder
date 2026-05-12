@@ -33,5 +33,14 @@
     <string name="voltar">voltar</string>
     <string name="gravandoModoOculto">Gravando em modo oculto</string>
     <string name="notification_ready_to_record">Pronto para gravar</string>
+    <string name="notification_front_camera">câmera frontal</string>
+    <string name="notification_back_camera">câmera traseira</string>
+    <string name="notification_ready_to_record_with_camera">Pronto para gravar na %1$s</string>
+    <string name="notification_recording_with_camera">Gravando com a %1$s</string>
+    <string name="notification_viewing_with_camera">Visualizando a %1$s</string>
+    <string name="notification_hidden_mode">Gravador em modo oculto</string>
+    <string name="notification_tap_to_exit">Toque na bolinha para sair</string>
+    <string name="camera_indicator_front">F</string>
+    <string name="camera_indicator_back">T</string>
     <string name="recorder_already_open">O gravador já está aberto. Procure a bolinha na tela.</string>
 </resources>

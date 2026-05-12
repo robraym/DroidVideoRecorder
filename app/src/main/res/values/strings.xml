@@ -33,5 +33,14 @@
     <string name="voltar">come back</string>
     <string name="gravandoModoOculto">Recording in hidden mode</string>
     <string name="notification_ready_to_record">Ready to record</string>
+    <string name="notification_front_camera">front camera</string>
+    <string name="notification_back_camera">back camera</string>
+    <string name="notification_ready_to_record_with_camera">Ready to record with the %1$s</string>
+    <string name="notification_recording_with_camera">Recording with the %1$s</string>
+    <string name="notification_viewing_with_camera">Viewing the %1$s</string>
+    <string name="notification_hidden_mode">Recorder in hidden mode</string>
+    <string name="notification_tap_to_exit">Tap the bubble to exit</string>
+    <string name="camera_indicator_front">F</string>
+    <string name="camera_indicator_back">B</string>
     <string name="recorder_already_open">Recorder is already open. Look for the bubble on the screen.</string>
 </resources>

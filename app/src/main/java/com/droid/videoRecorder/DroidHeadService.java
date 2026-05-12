@@ -8,7 +8,9 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
+import android.graphics.Color;
 import android.graphics.PixelFormat;
+import android.graphics.Typeface;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -28,7 +30,7 @@ import java.util.Locale;
 public class DroidHeadService extends Service implements TextToSpeech.OnInitListener, SensorEventListener {
     private static final int FOREGROUND_NOTIFICATION_ID = 100;
     private static final String NOTIFICATION_CHANNEL_ID = "droid_video_recorder_service";
-    private static final int CHAT_HEAD_SIZE_DP = 58;
+    private static final int CHAT_HEAD_SIZE_DP = 61;
     private static final float TWIST_THRESHOLD = 5.5f;
     private static final long TWIST_SEQUENCE_TIMEOUT_MS = 900;
     private static final long TWIST_COOLDOWN_MS = 1800;
@@ -52,6 +54,8 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private SensorManager sensorManager;
     private Sensor gyroscopeSensor;
+    private Notification.Builder notificationBuilder;
+    private NotificationManager notificationManager;
     private int lastTwistDirection;
     private int twistCount;
     private long lastTwistMoveTime;
@@ -195,8 +199,10 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
                     NOTIFICATION_CHANNEL_ID,
                     "Video Recorder",
                     NotificationManager.IMPORTANCE_LOW);
-            NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
             notificationManager.createNotificationChannel(channel);
+        } else {
+            notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         }
 
         Intent notificationIntent = new Intent(this, DroidConfigurationActivity.class);
@@ -207,18 +213,74 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
                 notificationIntent,
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0);
 
-        Notification.Builder builder = new Notification.Builder(this)
+        notificationBuilder = new Notification.Builder(this)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle(getString(R.string.app_name))
-                .setContentText(getString(R.string.notification_ready_to_record))
                 .setContentIntent(pendingIntent)
                 .setOngoing(true);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            builder.setChannelId(NOTIFICATION_CHANNEL_ID);
+            notificationBuilder.setChannelId(NOTIFICATION_CHANNEL_ID);
         }
 
-        startForeground(FOREGROUND_NOTIFICATION_ID, builder.build());
+        notificationBuilder.setContentText(GetReadyNotificationText());
+        startForeground(FOREGROUND_NOTIFICATION_ID, notificationBuilder.build());
+    }
+
+    private void UpdateNotification(String text) {
+        if (notificationBuilder == null || notificationManager == null) {
+            return;
+        }
+
+        notificationBuilder.setContentText(text);
+        notificationManager.notify(FOREGROUND_NOTIFICATION_ID, notificationBuilder.build());
+    }
+
+    private String GetCameraName(DroidConstants.EnumTypeViewCam typeViewCam) {
+        if (typeViewCam == DroidConstants.EnumTypeViewCam.FacingFront) {
+            return getString(R.string.notification_front_camera);
+        }
+        return getString(R.string.notification_back_camera);
+    }
+
+    private String GetReadyNotificationText() {
+        return getString(R.string.notification_ready_to_record_with_camera,
+                GetCameraName(DroidVideoRecorder.TypeViewCam));
+    }
+
+    private String GetRecordingNotificationText() {
+        return getString(R.string.notification_recording_with_camera,
+                GetCameraName(DroidVideoRecorder.TypeViewCam));
+    }
+
+    private String GetViewingNotificationText() {
+        return getString(R.string.notification_viewing_with_camera,
+                GetCameraName(DroidVideoRecorder.TypeViewCam));
+    }
+
+    private String GetCameraIndicatorText() {
+        if (DroidVideoRecorder.TypeViewCam == DroidConstants.EnumTypeViewCam.FacingFront) {
+            return getString(R.string.camera_indicator_front);
+        }
+        return getString(R.string.camera_indicator_back);
+    }
+
+    private void ShowCameraIndicator() {
+        txtHead.setText(GetCameraIndicatorText());
+        txtHead.setTextSize(22);
+        txtHead.setVisibility(View.VISIBLE);
+    }
+
+    private void HideCameraIndicator() {
+        txtHead.setVisibility(View.INVISIBLE);
+    }
+
+    private void ShowRecordingTimer() {
+        txtHead.setText("00:00");
+        txtHead.setTextSize(12);
+        if (chatHead.getVisibility() == View.VISIBLE) {
+            txtHead.setVisibility(View.VISIBLE);
+        }
     }
 
     private void InicializarVariavel() {
@@ -252,6 +314,10 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         params.height = dp(CHAT_HEAD_SIZE_DP);
         txtHead = new TextView(context);
         txtHead.setText("00:00");
+        txtHead.setTextColor(Color.WHITE);
+        txtHead.setTypeface(Typeface.DEFAULT_BOLD);
+        txtHead.setGravity(Gravity.CENTER);
+        txtHead.setShadowLayer(3, 0, 1, Color.BLACK);
         txtHead.setVisibility(View.INVISIBLE);
 
         params.gravity = Gravity.CENTER;
@@ -262,6 +328,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         tts = new TextToSpeech(context, this);
 
         DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.STOP;
+        DroidVideoRecorder.TypeViewCam = DroidConstants.EnumTypeViewCam.FacingBack;
         DroidVideoRecorder.SetContext(context);
         DroidVideoRecorder.LocalGravacaoVideo = DroidPrefsUtils.obtemLocalGravacao(context);
         onTouchListener = new TouchListener();
@@ -288,6 +355,8 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         stateRecVideoCLOSE = new ArrayList<>();
         stateRecVideoCLOSE.add(DroidConstants.EnumStateRecVideo.CLOSE);
         stateRecVideoCLOSE.add(DroidConstants.EnumStateRecVideo.STOP);
+
+        ShowCameraIndicator();
 
     }
 
@@ -478,31 +547,47 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         Fala(getString(R.string.modoOculto));
         chatHead.setVisibility(View.INVISIBLE);
         txtHead.setVisibility(View.INVISIBLE);
+        UpdateNotification(getString(R.string.notification_hidden_mode));
     }
     private void ModoOcultoSemFala() {
         chatHead.setVisibility(View.INVISIBLE);
         txtHead.setVisibility(View.INVISIBLE);
+        UpdateNotification(getString(R.string.notification_hidden_mode));
     }
 
     private void ModoVisivel() {
         Fala(getString(R.string.modoVisivel));
         chatHead.setVisibility(View.VISIBLE);
-        if (DroidPrefsUtils.exibeTempoGravacao(this))
-        {
+        if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.STOP) {
+            ShowCameraIndicator();
+        } else if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.RECORD
+                && DroidPrefsUtils.exibeTempoGravacao(this)) {
             txtHead.setVisibility(View.VISIBLE);
+        }
+
+        if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.RECORD) {
+            UpdateNotification(GetRecordingNotificationText());
+        } else if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.VIEW) {
+            UpdateNotification(GetViewingNotificationText());
+        } else {
+            UpdateNotification(GetReadyNotificationText());
         }
 
     }
 
     private void ShowView() {
+        HideCameraIndicator();
         chatHead.setImageResource(R.mipmap.viewrec);
         SetPreviewFullScreen(true);
         StartPreview(DroidConstants.EnumTypeViewCam.FacingBack);
+        DroidVideoRecorder.TypeViewCam = DroidConstants.EnumTypeViewCam.FacingBack;
         DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.VIEW;
+        UpdateNotification(GetViewingNotificationText());
         Vibrar(100);
     }
 
     private void ChangeTypeViewCam() {
+        HideCameraIndicator();
         chatHead.setImageResource(R.mipmap.viewrec);
         SetPreviewFullScreen(true);
 
@@ -516,10 +601,12 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
 
         StartPreview(DroidVideoRecorder.TypeViewCam);
         DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.VIEW;
+        UpdateNotification(GetViewingNotificationText());
         Vibrar(100);
     }
 
     private void ShowRec() {
+        HideCameraIndicator();
         chatHead.setImageResource(R.mipmap.rec);
         SetPreviewFullScreen(false);
         DroidVideoRecorder.OnInitRec(getResources().getConfiguration(), orientationEvent, DroidVideoRecorder.TypeViewCam);
@@ -528,6 +615,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             return;
         }
         DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.RECORD;
+        UpdateNotification(GetRecordingNotificationText());
         Vibrar(50);
         if (DroidPrefsUtils.exibeTempoGravacao(this)) {
             asyncTask = new Sincronizar().execute();
@@ -548,14 +636,19 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         chatHead.setImageResource(R.mipmap.stoprec);
         DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.STOP;
         DroidVideoRecorder.OnInitRec(getResources().getConfiguration(), orientationEvent, DroidConstants.EnumTypeViewCam.FacingBack);
+        DroidVideoRecorder.TypeViewCam = DroidConstants.EnumTypeViewCam.FacingBack;
         DroidVideoRecorder.OnViewRec(mSurfaceView.getHolder());
         DroidVideoRecorder.OnStopRecording(false);
+        UpdateNotification(GetReadyNotificationText());
+        ShowCameraIndicator();
     }
 
     private void ShowStop() {
         SetPreviewFullScreen(false);
         chatHead.setImageResource(R.mipmap.stoprec);
         DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.STOP;
+        UpdateNotification(GetReadyNotificationText());
+        ShowCameraIndicator();
     }
 
     private void SetPreviewFullScreen(boolean fullScreen) {
@@ -604,8 +697,10 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     }
 
     private void ShowClose() {
+        HideCameraIndicator();
         chatHead.setImageResource(R.mipmap.closerec);
         DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.CLOSE;
+        UpdateNotification(getString(R.string.notification_tap_to_exit));
         Vibrar(50);
     }
 
@@ -664,9 +759,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         @Override
         protected void onPreExecute() {
             super.onPreExecute();
-            if (chatHead.getVisibility() == View.VISIBLE) {
-                txtHead.setVisibility(View.VISIBLE);
-            }
+            ShowRecordingTimer();
 
         }
 
@@ -674,7 +767,11 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         protected void onCancelled() {
             super.onCancelled();
             txtHead.setText("00:00");
-            txtHead.setVisibility(View.INVISIBLE);
+            if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.STOP) {
+                ShowCameraIndicator();
+            } else {
+                txtHead.setVisibility(View.INVISIBLE);
+            }
         }
 
         @Override

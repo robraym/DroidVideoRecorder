@@ -13,9 +13,9 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="1a5aaae5-f10d-4ea2-8bc5-e80f45882faf" name="Default" comment="Correção das funcionalidades">
+    <list default="true" id="1a5aaae5-f10d-4ea2-8bc5-e80f45882faf" name="Default" comment="exibindo uma mensagem se for aberto duas vezes o app">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/src/main/java/com/droid/videoRecorder/DroidHeadService.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/droid/videoRecorder/DroidHeadService.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/droid/videoRecorder/DroidVideoRecorder.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/droid/videoRecorder/DroidVideoRecorder.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/src/main/res/values-pt/strings.xml" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/res/values-pt/strings.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/src/main/res/values/strings.xml" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/res/values/strings.xml" afterDir="false" />
     </list>
@@ -2202,7 +2202,23 @@
       <option name="project" value="LOCAL" />
       <updated>1777114163179</updated>
     </task>
-    <option name="localTasksCounter" value="3" />
+    <task id="LOCAL-00003" summary="aumentado o tamanho da bolinha de acao">
+      <option name="closed" value="true" />
+      <created>1778590415983</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1778590415983</updated>
+    </task>
+    <task id="LOCAL-00004" summary="exibindo uma mensagem se for aberto duas vezes o app">
+      <option name="closed" value="true" />
+      <created>1778590985419</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1778590985419</updated>
+    </task>
+    <option name="localTasksCounter" value="5" />
     <servers />
   </component>
   <component name="ToolWindowManager">
@@ -2257,7 +2273,9 @@
   <component name="VcsManagerConfiguration">
     <MESSAGE value="Atualizacao para versao atual de 2026 do android" />
     <MESSAGE value="Correção das funcionalidades" />
-    <option name="LAST_COMMIT_MESSAGE" value="Correção das funcionalidades" />
+    <MESSAGE value="aumentado o tamanho da bolinha de acao" />
+    <MESSAGE value="exibindo uma mensagem se for aberto duas vezes o app" />
+    <option name="LAST_COMMIT_MESSAGE" value="exibindo uma mensagem se for aberto duas vezes o app" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -2278,7 +2296,7 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" type="java-line">
           <url>file://$PROJECT_DIR$/app/src/main/java/com/droid/videoRecorder/DroidHeadService.java</url>
-          <line>95</line>
+          <line>100</line>
           <option name="timeStamp" value="18" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="java-line">
@@ -2298,12 +2316,12 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" type="java-line">
           <url>file://$PROJECT_DIR$/app/src/main/java/com/droid/videoRecorder/DroidHeadService.java</url>
-          <line>490</line>
+          <line>571</line>
           <option name="timeStamp" value="24" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="java-line">
           <url>file://$PROJECT_DIR$/app/src/main/java/com/droid/videoRecorder/DroidHeadService.java</url>
-          <line>372</line>
+          <line>447</line>
           <option name="timeStamp" value="25" />
         </line-breakpoint>
       </breakpoints>
@@ -2660,12 +2678,12 @@
       <map>
         <entry key="com.droid.videoRecorder">
           <value>
-            <CheckInfo lastCheckTimestamp="1777082127070" />
+            <CheckInfo lastCheckTimestamp="1778590403573" />
           </value>
         </entry>
         <entry key="com.droid.videoRecorder.test">
           <value>
-            <CheckInfo lastCheckTimestamp="1777082127070" />
+            <CheckInfo lastCheckTimestamp="1778590403538" />
           </value>
         </entry>
       </map>
