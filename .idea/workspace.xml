@@ -13,7 +13,7 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="1a5aaae5-f10d-4ea2-8bc5-e80f45882faf" name="Default" comment="exibindo uma mensagem se for aberto duas vezes o app">
+    <list default="true" id="1a5aaae5-f10d-4ea2-8bc5-e80f45882faf" name="Default" comment="implementado T ou F dependendo da camera usada">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/src/main/java/com/droid/videoRecorder/DroidHeadService.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/droid/videoRecorder/DroidHeadService.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/src/main/res/values-pt/strings.xml" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/res/values-pt/strings.xml" afterDir="false" />
@@ -30,7 +30,7 @@
   <component name="CreatePatchCommitExecutor">
     <option name="PATCH_PATH" value="" />
   </component>
-  <component name="ExecutionTargetManager" SELECTED_TARGET="device_and_snapshot_combo_box_target[DeviceId(pluginId=PhysicalDevice, isTemplate=false, identifier=serial=RQCY701KN1N)]" />
+  <component name="ExecutionTargetManager" SELECTED_TARGET="device_and_snapshot_combo_box_target[DeviceId(pluginId=PhysicalDevice, isTemplate=false, identifier=serial=ce01182132dd64230d)]" />
   <component name="ExternalProjectsData">
     <projectState path="$PROJECT_DIR$">
       <ProjectState />
@@ -2218,7 +2218,15 @@
       <option name="project" value="LOCAL" />
       <updated>1778590985419</updated>
     </task>
-    <option name="localTasksCounter" value="5" />
+    <task id="LOCAL-00005" summary="implementado T ou F dependendo da camera usada">
+      <option name="closed" value="true" />
+      <created>1778592399107</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1778592399107</updated>
+    </task>
+    <option name="localTasksCounter" value="6" />
     <servers />
   </component>
   <component name="ToolWindowManager">
@@ -2275,7 +2283,8 @@
     <MESSAGE value="Correção das funcionalidades" />
     <MESSAGE value="aumentado o tamanho da bolinha de acao" />
     <MESSAGE value="exibindo uma mensagem se for aberto duas vezes o app" />
-    <option name="LAST_COMMIT_MESSAGE" value="exibindo uma mensagem se for aberto duas vezes o app" />
+    <MESSAGE value="implementado T ou F dependendo da camera usada" />
+    <option name="LAST_COMMIT_MESSAGE" value="implementado T ou F dependendo da camera usada" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -2296,7 +2305,7 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" type="java-line">
           <url>file://$PROJECT_DIR$/app/src/main/java/com/droid/videoRecorder/DroidHeadService.java</url>
-          <line>100</line>
+          <line>101</line>
           <option name="timeStamp" value="18" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="java-line">
@@ -2316,12 +2325,12 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" type="java-line">
           <url>file://$PROJECT_DIR$/app/src/main/java/com/droid/videoRecorder/DroidHeadService.java</url>
-          <line>571</line>
+          <line>611</line>
           <option name="timeStamp" value="24" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="java-line">
           <url>file://$PROJECT_DIR$/app/src/main/java/com/droid/videoRecorder/DroidHeadService.java</url>
-          <line>447</line>
+          <line>479</line>
           <option name="timeStamp" value="25" />
         </line-breakpoint>
       </breakpoints>

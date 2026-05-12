@@ -40,6 +40,8 @@
     <string name="notification_viewing_with_camera">Visualizando a %1$s</string>
     <string name="notification_hidden_mode">Gravador em modo oculto</string>
     <string name="notification_tap_to_exit">Toque na bolinha para sair</string>
+    <string name="camera_label_front">Frontal</string>
+    <string name="camera_label_back">Traseira</string>
     <string name="camera_indicator_front">F</string>
     <string name="camera_indicator_back">T</string>
     <string name="recorder_already_open">O gravador já está aberto. Procure a bolinha na tela.</string>

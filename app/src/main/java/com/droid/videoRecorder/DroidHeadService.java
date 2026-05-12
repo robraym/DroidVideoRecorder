@@ -39,6 +39,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     private WindowManager windowManager;
     private ImageView chatHead;
     private TextView txtHead;
+    private TextView txtCameraBadge;
     private SurfaceView mSurfaceView;
     private int initialX;
     private int initialY;
@@ -174,6 +175,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         super.onDestroy();
         if (chatHead != null) windowManager.removeView(chatHead);
         if (txtHead != null) windowManager.removeView(txtHead);
+        if (txtCameraBadge != null) windowManager.removeView(txtCameraBadge);
         if (mSurfaceView != null) windowManager.removeView(mSurfaceView);
         if (sensorManager != null) sensorManager.unregisterListener(this);
         Vibrar(100);
@@ -260,6 +262,13 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
 
     private String GetCameraIndicatorText() {
         if (DroidVideoRecorder.TypeViewCam == DroidConstants.EnumTypeViewCam.FacingFront) {
+            return getString(R.string.camera_label_front);
+        }
+        return getString(R.string.camera_label_back);
+    }
+
+    private String GetCameraBadgeText() {
+        if (DroidVideoRecorder.TypeViewCam == DroidConstants.EnumTypeViewCam.FacingFront) {
             return getString(R.string.camera_indicator_front);
         }
         return getString(R.string.camera_indicator_back);
@@ -267,12 +276,24 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
 
     private void ShowCameraIndicator() {
         txtHead.setText(GetCameraIndicatorText());
-        txtHead.setTextSize(22);
+        txtHead.setTextSize(10);
         txtHead.setVisibility(View.VISIBLE);
+        HideRecordingBadge();
     }
 
     private void HideCameraIndicator() {
         txtHead.setVisibility(View.INVISIBLE);
+    }
+
+    private void ShowRecordingBadge() {
+        txtCameraBadge.setText(GetCameraBadgeText());
+        txtCameraBadge.setVisibility(View.VISIBLE);
+    }
+
+    private void HideRecordingBadge() {
+        if (txtCameraBadge != null) {
+            txtCameraBadge.setVisibility(View.INVISIBLE);
+        }
     }
 
     private void ShowRecordingTimer() {
@@ -319,12 +340,21 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         txtHead.setGravity(Gravity.CENTER);
         txtHead.setShadowLayer(3, 0, 1, Color.BLACK);
         txtHead.setVisibility(View.INVISIBLE);
+        txtCameraBadge = new TextView(context);
+        txtCameraBadge.setTextColor(Color.WHITE);
+        txtCameraBadge.setTypeface(Typeface.DEFAULT_BOLD);
+        txtCameraBadge.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        txtCameraBadge.setPadding(0, 0, 0, dp(5));
+        txtCameraBadge.setTextSize(9);
+        txtCameraBadge.setShadowLayer(3, 0, 1, Color.BLACK);
+        txtCameraBadge.setVisibility(View.INVISIBLE);
 
         params.gravity = Gravity.CENTER;
         surfaceParams.gravity = Gravity.CENTER;
         windowManager.addView(mSurfaceView, surfaceParams);
         windowManager.addView(chatHead, params);
         windowManager.addView(txtHead, params);
+        windowManager.addView(txtCameraBadge, params);
         tts = new TextToSpeech(context, this);
 
         DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.STOP;
@@ -362,6 +392,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
 
     private void InicializarAcao() {
         txtHead.setOnTouchListener(onTouchListener);
+        txtCameraBadge.setOnTouchListener(onTouchListener);
         chatHead.setOnTouchListener(onTouchListener);
         sensorManager = (SensorManager) context.getSystemService(SENSOR_SERVICE);
         if (sensorManager != null) {
@@ -547,11 +578,13 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         Fala(getString(R.string.modoOculto));
         chatHead.setVisibility(View.INVISIBLE);
         txtHead.setVisibility(View.INVISIBLE);
+        HideRecordingBadge();
         UpdateNotification(getString(R.string.notification_hidden_mode));
     }
     private void ModoOcultoSemFala() {
         chatHead.setVisibility(View.INVISIBLE);
         txtHead.setVisibility(View.INVISIBLE);
+        HideRecordingBadge();
         UpdateNotification(getString(R.string.notification_hidden_mode));
     }
 
@@ -576,18 +609,17 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     }
 
     private void ShowView() {
-        HideCameraIndicator();
         chatHead.setImageResource(R.mipmap.viewrec);
         SetPreviewFullScreen(true);
         StartPreview(DroidConstants.EnumTypeViewCam.FacingBack);
         DroidVideoRecorder.TypeViewCam = DroidConstants.EnumTypeViewCam.FacingBack;
         DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.VIEW;
         UpdateNotification(GetViewingNotificationText());
+        ShowCameraIndicator();
         Vibrar(100);
     }
 
     private void ChangeTypeViewCam() {
-        HideCameraIndicator();
         chatHead.setImageResource(R.mipmap.viewrec);
         SetPreviewFullScreen(true);
 
@@ -602,6 +634,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         StartPreview(DroidVideoRecorder.TypeViewCam);
         DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.VIEW;
         UpdateNotification(GetViewingNotificationText());
+        ShowCameraIndicator();
         Vibrar(100);
     }
 
@@ -616,6 +649,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         }
         DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.RECORD;
         UpdateNotification(GetRecordingNotificationText());
+        ShowRecordingBadge();
         Vibrar(50);
         if (DroidPrefsUtils.exibeTempoGravacao(this)) {
             asyncTask = new Sincronizar().execute();
@@ -698,6 +732,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
 
     private void ShowClose() {
         HideCameraIndicator();
+        HideRecordingBadge();
         chatHead.setImageResource(R.mipmap.closerec);
         DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.CLOSE;
         UpdateNotification(getString(R.string.notification_tap_to_exit));
@@ -848,6 +883,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
                     params.y = initialY + totalMoveY;
                     windowManager.updateViewLayout(chatHead, params);
                     windowManager.updateViewLayout(txtHead, params);
+                    windowManager.updateViewLayout(txtCameraBadge, params);
                     return true;
             }
 
