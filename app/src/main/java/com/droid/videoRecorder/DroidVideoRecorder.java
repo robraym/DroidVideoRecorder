@@ -74,7 +74,7 @@ public class DroidVideoRecorder {
         } finally {
             if (strSDCardPath == "" || strDirectory == "") {
                 if (strDirectory == "") {
-                    File directory = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "Video Recorder");
+                    File directory = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "Recorder");
                     strDirectory = CreateGetDirectory(directory.getAbsolutePath());
                 }
             }

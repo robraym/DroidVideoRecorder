@@ -28,6 +28,7 @@ import java.util.Locale;
 public class DroidHeadService extends Service implements TextToSpeech.OnInitListener, SensorEventListener {
     private static final int FOREGROUND_NOTIFICATION_ID = 100;
     private static final String NOTIFICATION_CHANNEL_ID = "droid_video_recorder_service";
+    private static final int CHAT_HEAD_SIZE_DP = 58;
     private static final float TWIST_THRESHOLD = 5.5f;
     private static final long TWIST_SEQUENCE_TIMEOUT_MS = 900;
     private static final long TWIST_COOLDOWN_MS = 1800;
@@ -84,6 +85,10 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             return WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
         }
         return WindowManager.LayoutParams.TYPE_SYSTEM_ERROR;
+    }
+
+    private int dp(int value) {
+        return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
     }
 
     private void TimeSleep(Integer seg) {
@@ -236,6 +241,8 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
 
         chatHead = new ImageView(context);
         chatHead.setImageResource(R.mipmap.stoprec);
+        params.width = dp(CHAT_HEAD_SIZE_DP);
+        params.height = dp(CHAT_HEAD_SIZE_DP);
         txtHead = new TextView(context);
         txtHead.setText("00:00");
         txtHead.setVisibility(View.INVISIBLE);

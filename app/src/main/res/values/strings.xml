@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Video Recorder</string>
+    <string name="app_name">Recorder</string>
     <string name="txt_titulo">Settings</string>
     <string name="txt_tela_Config">SETTINGS SCREEN</string>
     <string name="spf_exibe_iniciar">Show this screen when opening the app</string>
