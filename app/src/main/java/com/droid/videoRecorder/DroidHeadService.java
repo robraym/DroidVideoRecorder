@@ -332,7 +332,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         });
 
         chatHead = new ImageView(context);
-        chatHead.setImageResource(R.mipmap.stoprec);
+        chatHead.setImageResource(R.mipmap.viewrec);
         params.width = dp(CHAT_HEAD_SIZE_DP);
         params.height = dp(CHAT_HEAD_SIZE_DP);
         txtHead = new TextView(context);
@@ -678,7 +678,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
 
     private void GetDefaultStop() {
         SetPreviewFullScreen(false);
-        chatHead.setImageResource(R.mipmap.stoprec);
+        chatHead.setImageResource(R.mipmap.viewrec);
         DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.STOP;
         DroidVideoRecorder.OnInitRec(getResources().getConfiguration(), orientationEvent, DroidVideoRecorder.TypeViewCam);
         DroidVideoRecorder.OnViewRec(mSurfaceView.getHolder());
@@ -689,7 +689,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
 
     private void ShowStop() {
         SetPreviewFullScreen(false);
-        chatHead.setImageResource(R.mipmap.stoprec);
+        chatHead.setImageResource(R.mipmap.viewrec);
         DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.STOP;
         UpdateNotification(GetReadyNotificationText());
         ShowCameraIndicator();
@@ -903,6 +903,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     }
 
 }
+
 
 
 

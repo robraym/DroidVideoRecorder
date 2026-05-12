@@ -13,11 +13,8 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="1a5aaae5-f10d-4ea2-8bc5-e80f45882faf" name="Default" comment="ajuste visual">
-      <change beforePath="$PROJECT_DIR$/.idea/deploymentTargetSelector.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/deploymentTargetSelector.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+    <list default="true" id="1a5aaae5-f10d-4ea2-8bc5-e80f45882faf" name="Default" comment="ajustes visuais">
       <change beforePath="$PROJECT_DIR$/app/src/main/java/com/droid/videoRecorder/DroidHeadService.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/droid/videoRecorder/DroidHeadService.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/droid/videoRecorder/DroidPrefsUtils.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/droid/videoRecorder/DroidPrefsUtils.java" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -2234,7 +2231,15 @@
       <option name="project" value="LOCAL" />
       <updated>1778594044987</updated>
     </task>
-    <option name="localTasksCounter" value="7" />
+    <task id="LOCAL-00007" summary="ajustes visuais">
+      <option name="closed" value="true" />
+      <created>1778594890174</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1778594890174</updated>
+    </task>
+    <option name="localTasksCounter" value="8" />
     <servers />
   </component>
   <component name="ToolWindowManager">
@@ -2293,7 +2298,8 @@
     <MESSAGE value="exibindo uma mensagem se for aberto duas vezes o app" />
     <MESSAGE value="implementado T ou F dependendo da camera usada" />
     <MESSAGE value="ajuste visual" />
-    <option name="LAST_COMMIT_MESSAGE" value="ajuste visual" />
+    <MESSAGE value="ajustes visuais" />
+    <option name="LAST_COMMIT_MESSAGE" value="ajustes visuais" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
