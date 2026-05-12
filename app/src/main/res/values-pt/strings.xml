@@ -33,4 +33,5 @@
     <string name="voltar">voltar</string>
     <string name="gravandoModoOculto">Gravando em modo oculto</string>
     <string name="notification_ready_to_record">Pronto para gravar</string>
+    <string name="recorder_already_open">O gravador já está aberto. Procure a bolinha na tela.</string>
 </resources>

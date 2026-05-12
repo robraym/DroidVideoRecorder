@@ -33,4 +33,5 @@
     <string name="voltar">come back</string>
     <string name="gravandoModoOculto">Recording in hidden mode</string>
     <string name="notification_ready_to_record">Ready to record</string>
+    <string name="recorder_already_open">Recorder is already open. Look for the bubble on the screen.</string>
 </resources>

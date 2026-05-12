@@ -32,6 +32,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     private static final float TWIST_THRESHOLD = 5.5f;
     private static final long TWIST_SEQUENCE_TIMEOUT_MS = 900;
     private static final long TWIST_COOLDOWN_MS = 1800;
+    private static boolean serviceActive;
 
     private WindowManager windowManager;
     private ImageView chatHead;
@@ -146,6 +147,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     @Override
     public void onCreate() {
         super.onCreate();
+        serviceActive = true;
         Log.d("DVR", "DroidHeadService onCreate");
         StartForegroundServiceNotification();
         InicializarVariavel();
@@ -164,12 +166,17 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     @Override
     public void onDestroy() {
         Log.d("DVR", "DroidHeadService onDestroy");
+        serviceActive = false;
         super.onDestroy();
         if (chatHead != null) windowManager.removeView(chatHead);
         if (txtHead != null) windowManager.removeView(txtHead);
         if (mSurfaceView != null) windowManager.removeView(mSurfaceView);
         if (sensorManager != null) sensorManager.unregisterListener(this);
         Vibrar(100);
+    }
+
+    public static boolean IsActive() {
+        return serviceActive;
     }
 
     @Override

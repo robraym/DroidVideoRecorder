@@ -507,6 +507,14 @@ public class DroidConfigurationActivity extends Activity {
 
         startupServiceRequested = true;
 
+        if (DroidHeadService.IsActive() && ChamadaBroadCastPorComandoTexto().isEmpty()) {
+            Toast.makeText(this, getString(R.string.recorder_already_open), Toast.LENGTH_LONG).show();
+            serviceStarted = true;
+            startupServiceRequested = false;
+            overlayPermissionRequested = false;
+            return;
+        }
+
         if (!HasRuntimePermissions()) {
             RequestRuntimePermissions();
             return;
