@@ -13,8 +13,10 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="1a5aaae5-f10d-4ea2-8bc5-e80f45882faf" name="Default" comment="ajustes visuais">
-      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/droid/videoRecorder/DroidHeadService.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/droid/videoRecorder/DroidHeadService.java" afterDir="false" />
+    <list default="true" id="1a5aaae5-f10d-4ea2-8bc5-e80f45882faf" name="Default" comment="ajustes visuais, tirando o botao cinza e deixando somente o verde para pronto para gravar">
+      <change beforePath="$PROJECT_DIR$/.idea/caches/deviceStreaming.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/caches/deviceStreaming.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -27,7 +29,7 @@
   <component name="CreatePatchCommitExecutor">
     <option name="PATCH_PATH" value="" />
   </component>
-  <component name="ExecutionTargetManager" SELECTED_TARGET="device_and_snapshot_combo_box_target[DeviceId(pluginId=PhysicalDevice, isTemplate=false, identifier=serial=RQCY701KN1N)]" />
+  <component name="ExecutionTargetManager" SELECTED_TARGET="device_and_snapshot_combo_box_target[DeviceId(pluginId=PhysicalDevice, isTemplate=false, identifier=serial=RXCX4067BZZ)]" />
   <component name="ExternalProjectsData">
     <projectState path="$PROJECT_DIR$">
       <ProjectState />
@@ -2239,7 +2241,15 @@
       <option name="project" value="LOCAL" />
       <updated>1778594890174</updated>
     </task>
-    <option name="localTasksCounter" value="8" />
+    <task id="LOCAL-00008" summary="ajustes visuais, tirando o botao cinza e deixando somente o verde para pronto para gravar">
+      <option name="closed" value="true" />
+      <created>1778595293790</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1778595293790</updated>
+    </task>
+    <option name="localTasksCounter" value="9" />
     <servers />
   </component>
   <component name="ToolWindowManager">
@@ -2299,7 +2309,8 @@
     <MESSAGE value="implementado T ou F dependendo da camera usada" />
     <MESSAGE value="ajuste visual" />
     <MESSAGE value="ajustes visuais" />
-    <option name="LAST_COMMIT_MESSAGE" value="ajustes visuais" />
+    <MESSAGE value="ajustes visuais, tirando o botao cinza e deixando somente o verde para pronto para gravar" />
+    <option name="LAST_COMMIT_MESSAGE" value="ajustes visuais, tirando o botao cinza e deixando somente o verde para pronto para gravar" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
