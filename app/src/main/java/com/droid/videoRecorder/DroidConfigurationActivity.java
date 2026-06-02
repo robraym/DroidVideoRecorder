@@ -35,7 +35,6 @@ public class DroidConfigurationActivity extends Activity {
 
     private Context context;
     private SharedPreferences preferences;
-    private Switch commandSwitch;
     private TextView storageSummary;
     private boolean canFinish;
     private boolean serviceStarted;
@@ -44,7 +43,6 @@ public class DroidConfigurationActivity extends Activity {
     private boolean overlayPermissionScreenVisited;
     private boolean permissionFlowActive;
     private boolean runtimePermissionRequested;
-    static int sdk_int = android.os.Build.VERSION.SDK_INT;
     private static final int COLOR_BACKGROUND = Color.rgb(0, 0, 0);
     private static final int COLOR_GROUP = Color.rgb(28, 29, 33);
     private static final int COLOR_PRIMARY_TEXT = Color.rgb(248, 248, 250);
@@ -65,23 +63,14 @@ public class DroidConfigurationActivity extends Activity {
         return DroidPrefsUtils.chamadaPeloServico(getIntent());
     }
 
-    private boolean ChamadaConfigPorComandoTexto() {
-        return DroidPrefsUtils.chamadaPorComandoTexto(getIntent());
-    }
-
-    private String ChamadaBroadCastPorComandoTexto() {
-        return DroidPrefsUtils.chamadaBroadCastPorComandoTexto(getIntent());
-    }
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         context = getBaseContext();
         preferences = PreferenceManager.getDefaultSharedPreferences(context);
         boolean exibeTelaInicial = ExibeTelaInicial();
         boolean chamadaPeloServico = ChamadaPeloServico();
-        boolean chamadaConfigPorComandoTexto = ChamadaConfigPorComandoTexto();
 
-        if (exibeTelaInicial || chamadaPeloServico || chamadaConfigPorComandoTexto) {
+        if (exibeTelaInicial || chamadaPeloServico) {
             setTheme(R.style.DefaultTheme);
         } else {
             setTheme(R.style.TranslucentTheme);
@@ -89,7 +78,7 @@ public class DroidConfigurationActivity extends Activity {
         super.onCreate(savedInstanceState);
         canFinish = true;
 
-        if (exibeTelaInicial || chamadaPeloServico || chamadaConfigPorComandoTexto) {
+        if (exibeTelaInicial || chamadaPeloServico) {
             BuildSettingsScreen();
         } else if (HasRuntimePermissions() && HasOverlayPermission()) {
             finish();
@@ -163,30 +152,6 @@ public class DroidConfigurationActivity extends Activity {
         commandGroup.setLayoutParams(commandParams);
 
         commandGroup.addView(CreateSwitchRow(
-                "C",
-                COLOR_ICON_PURPLE,
-                getString(R.string.comando),
-                getString(R.string.aceitaComandoPorTexto),
-                "spf_aceitaComandoPorTexto",
-                false,
-                sdk_int >= 21,
-                new CompoundButton.OnCheckedChangeListener() {
-                    @Override
-                    public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                        try {
-                            boolean status = DroidPrefsUtils.statusComandoPorTexto(context);
-                            if (isChecked != status) {
-                                canFinish = false;
-                                startActivity(new Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"));
-                            }
-                        } catch (Exception ex) {
-                            LogException("DVR", ex);
-                        }
-                    }
-                }));
-        commandGroup.addView(CreateDivider());
-
-        commandGroup.addView(CreateSwitchRow(
                 "V",
                 COLOR_ICON_ORANGE,
                 getString(R.string.fala),
@@ -213,9 +178,6 @@ public class DroidConfigurationActivity extends Activity {
         row.addView(texts, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
         final Switch rowSwitch = new Switch(this);
-        if ("spf_aceitaComandoPorTexto".equals(key)) {
-            commandSwitch = rowSwitch;
-        }
         StyleSwitch(rowSwitch);
         rowSwitch.setChecked(preferences.getBoolean(key, defaultValue));
         rowSwitch.setEnabled(enabled);
@@ -482,13 +444,10 @@ public class DroidConfigurationActivity extends Activity {
                 return;
             }
 
-            if (!ExibeTelaInicial() && !ChamadaPeloServico() && !ChamadaConfigPorComandoTexto()
+            if (!ExibeTelaInicial() && !ChamadaPeloServico()
                     && HasRuntimePermissions() && HasOverlayPermission()) {
                 finish();
             } else {
-                if (sdk_int >= 21 && commandSwitch != null) {
-                    commandSwitch.setChecked(DroidPrefsUtils.statusComandoPorTexto(context));
-                }
                 RefreshStorageSummary();
             }
 
@@ -531,14 +490,14 @@ public class DroidConfigurationActivity extends Activity {
     }
 
     private void StartServiceWhenReady(boolean chamadaPeloServico) {
-        if (chamadaPeloServico || (serviceStarted && ChamadaBroadCastPorComandoTexto().isEmpty())) {
+        if (chamadaPeloServico || serviceStarted) {
             return;
         }
 
         startupServiceRequested = true;
         permissionFlowActive = true;
 
-        if (DroidHeadService.IsActive() && ChamadaBroadCastPorComandoTexto().isEmpty()) {
+        if (DroidHeadService.IsActive()) {
             Toast.makeText(this, getString(R.string.recorder_already_open), Toast.LENGTH_LONG).show();
             serviceStarted = true;
             startupServiceRequested = false;
@@ -564,13 +523,12 @@ public class DroidConfigurationActivity extends Activity {
         }
 
         Intent intentService = new Intent(context, DroidHeadService.class);
-        intentService.putExtra(DroidConstants.CHAMADAPORCOMANDOTEXTO, ChamadaBroadCastPorComandoTexto());
         startService(intentService);
         serviceStarted = true;
         overlayPermissionRequested = false;
         startupServiceRequested = false;
         permissionFlowActive = false;
-        if (!ExibeTelaInicial() && !ChamadaPeloServico() && !ChamadaConfigPorComandoTexto()) {
+        if (!ExibeTelaInicial() && !ChamadaPeloServico()) {
             finish();
         }
     }

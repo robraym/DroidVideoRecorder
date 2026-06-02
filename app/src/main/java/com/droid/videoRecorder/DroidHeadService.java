@@ -49,7 +49,9 @@ import java.util.Locale;
 public class DroidHeadService extends Service implements TextToSpeech.OnInitListener, SensorEventListener {
     private static final int FOREGROUND_NOTIFICATION_ID = 100;
     private static final String NOTIFICATION_CHANNEL_ID = "droid_video_recorder_service";
-    private static final int CHAT_HEAD_SIZE_DP = 122;
+    private static final int CHAT_HEAD_DEFAULT_SIZE_DP = 122;
+    private static final int CHAT_HEAD_MIN_SIZE_DP = 84;
+    private static final int CHAT_HEAD_MAX_SIZE_DP = 220;
     private static final int TRASH_TARGET_WIDTH_DP = 104;
     private static final int TRASH_TARGET_HEIGHT_DP = 108;
     private static final float TWIST_THRESHOLD = 5.5f;
@@ -70,10 +72,10 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     private float initialTouchX;
     private float initialTouchY;
     private int orientationEvent;
+    private int chatHeadSizeDp = CHAT_HEAD_DEFAULT_SIZE_DP;
     private Context context;
     private AsyncTask asyncTask;
     private View.OnTouchListener onTouchListener;
-    private String chamadaPorComandoTexto;
     private boolean pendingPreview;
     private DroidConstants.EnumTypeViewCam pendingPreviewCam = DroidConstants.EnumTypeViewCam.FacingBack;
     private boolean pendingReadyPreview;
@@ -95,7 +97,6 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     private long lastTwistCommandTime;
 
     private boolean necessarioComandoDepoisDoInit = false;
-    private Intent mIntentService;
     private TextToSpeech tts;
     private ArrayList<DroidConstants.EnumStateRecVideo> stateRecVideoSTOP;
     private ArrayList<DroidConstants.EnumStateRecVideo> stateRecVideoVIEW;
@@ -150,6 +151,14 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
     }
 
+    private int BubbleDp(int baseValue) {
+        return Math.max(1, Math.round(baseValue * chatHeadSizeDp / (float) CHAT_HEAD_DEFAULT_SIZE_DP));
+    }
+
+    private float BubbleTextSize(float baseValue) {
+        return Math.max(1f, baseValue * chatHeadSizeDp / CHAT_HEAD_DEFAULT_SIZE_DP);
+    }
+
     private void TimeSleep(Integer seg) {
         try {
             Thread.sleep(seg);
@@ -166,39 +175,12 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     @Override
     public void onInit(int status) {
         necessarioComandoDepoisDoInit = true;
-        if (ComandoPorTexto("MIR")) {
-            GravarModoOculto();
-        } else if (ComandoPorTexto("R")) {
-            Gravar();
-        } else if (ComandoPorTexto("CFG")) {
-            AbrirConfig();
-        } else Abrir();
+        Abrir();
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         Log.d("DVR", "DroidHeadService onStartCommand");
-        mIntentService = intent != null ? intent : new Intent();
-        Log.d("DVR", "Comando recebido pelo servico: " + mIntentService.getStringExtra(DroidConstants.CHAMADAPORCOMANDOTEXTO));
-
-        if (ComandoPorTexto("MI")) {
-            ModoOculto();
-        } else if (ComandoPorTexto("MIR")) {
-            ModoOcultoSemFala();
-        } else if (ComandoPorTexto("MV")) {
-            ModoVisivel();
-        } else if (ComandoPorTexto("S")) {
-            Parar();
-        } else if (ComandoPorTexto("V")) {
-            Visualizar();
-        } else if (ComandoPorTexto("R")) {
-            Gravar();
-        } else if (ComandoPorTexto("C")) {
-            Fechar();
-        } else if (ComandoPorTexto("Q")) {
-            Sair();
-        }
-
         return START_STICKY;
     }
 
@@ -336,7 +318,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
 
     private void ShowCameraIndicator() {
         txtHead.setText(GetCameraIndicatorText());
-        txtHead.setTextSize(10);
+        txtHead.setTextSize(BubbleTextSize(10));
         txtHead.setGravity(Gravity.CENTER);
         txtHead.setPadding(0, 0, 0, 0);
         txtHead.setVisibility(View.VISIBLE);
@@ -360,9 +342,9 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
 
     private void ShowRecordingTimer() {
         txtHead.setText("00:00");
-        txtHead.setTextSize(12);
+        txtHead.setTextSize(BubbleTextSize(12));
         txtHead.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-        txtHead.setPadding(0, 0, 0, dp(8));
+        txtHead.setPadding(0, 0, 0, dp(BubbleDp(8)));
         if (chatHead.getVisibility() == View.VISIBLE) {
             txtHead.setVisibility(View.VISIBLE);
         }
@@ -370,6 +352,11 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
 
     private void InicializarVariavel() {
         context = getBaseContext();
+        chatHeadSizeDp = DroidPrefsUtils.obtemTamanhoBolinha(
+                context,
+                CHAT_HEAD_DEFAULT_SIZE_DP,
+                CHAT_HEAD_MIN_SIZE_DP,
+                CHAT_HEAD_MAX_SIZE_DP);
 
         windowManager = (WindowManager) context.getSystemService(WINDOW_SERVICE);
 
@@ -432,8 +419,8 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
 
         chatHead = new ImageView(context);
         chatHead.setImageResource(R.mipmap.viewrec);
-        params.width = dp(CHAT_HEAD_SIZE_DP);
-        params.height = dp(CHAT_HEAD_SIZE_DP);
+        params.width = dp(chatHeadSizeDp);
+        params.height = dp(chatHeadSizeDp);
         txtHead = new TextView(context);
         txtHead.setText("00:00");
         txtHead.setTextColor(Color.WHITE);
@@ -445,8 +432,8 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         txtCameraBadge.setTextColor(Color.WHITE);
         txtCameraBadge.setTypeface(Typeface.DEFAULT_BOLD);
         txtCameraBadge.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-        txtCameraBadge.setPadding(0, 0, 0, dp(5));
-        txtCameraBadge.setTextSize(9);
+        txtCameraBadge.setPadding(0, 0, 0, dp(BubbleDp(5)));
+        txtCameraBadge.setTextSize(BubbleTextSize(9));
         txtCameraBadge.setShadowLayer(3, 0, 1, Color.BLACK);
         txtCameraBadge.setVisibility(View.INVISIBLE);
         trashTarget = new TrashTargetView(context);
@@ -589,7 +576,6 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     }
 
     private void StopService() {
-        //context.stopService(mIntentService);
         stopSelf();
         tts.shutdown();
     }
@@ -607,17 +593,6 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         }
     }
 
-    private boolean ComandoPorTexto(String cmd) {
-        boolean ret = false;
-        if (DroidPrefsUtils.aceitaComandoPorTexto(context)) {
-            chamadaPorComandoTexto = mIntentService.getStringExtra(DroidConstants.CHAMADAPORCOMANDOTEXTO);
-            if (chamadaPorComandoTexto != null) {
-                ret = chamadaPorComandoTexto.equalsIgnoreCase(DroidConstants.COMANDOINICIADOPOR + cmd);
-            }
-        }
-        return ret;
-    }
-
     private void Abrir() {
         Fala(getString(R.string.abrindoDVR));
     }
@@ -628,17 +603,13 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     }
 
     private void Gravar() {
-        Gravacao(false);
+        Gravacao();
     }
 
-    private void Gravacao(boolean gravarModoOculto) {
+    private void Gravacao() {
         if (necessarioComandoDepoisDoInit) {
             if (Permite(DroidVideoRecorder.StateRecVideo.RECORD)) {
-                if (gravarModoOculto) {
-                    Fala(getString(R.string.gravandoModoOculto));
-                } else {
-                    Fala(getString(R.string.gravando));
-                }
+                Fala(getString(R.string.gravando));
             }
             ShowRec();
         }
@@ -684,63 +655,6 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             FalaComAtraso(getString(R.string.saindoDVR), 2);
             StopService();
         }
-    }
-
-    private void NaoEntendi() {
-        Fala(getString(R.string.naoEntendi));
-    }
-
-    private void GravarModoOculto() {
-        Gravacao(true);
-    }
-
-    private void ModoOculto() {
-        Fala(getString(R.string.modoOculto));
-        if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.STOP) {
-            HideReadyPreview();
-        } else if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.RECORD
-                && readyPreviewView != null) {
-            readyPreviewView.setAlpha(0f);
-        }
-        chatHead.setVisibility(View.INVISIBLE);
-        txtHead.setVisibility(View.INVISIBLE);
-        HideRecordingBadge();
-        UpdateNotification(getString(R.string.notification_hidden_mode));
-    }
-    private void ModoOcultoSemFala() {
-        if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.STOP) {
-            HideReadyPreview();
-        } else if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.RECORD
-                && readyPreviewView != null) {
-            readyPreviewView.setAlpha(0f);
-        }
-        chatHead.setVisibility(View.INVISIBLE);
-        txtHead.setVisibility(View.INVISIBLE);
-        HideRecordingBadge();
-        UpdateNotification(getString(R.string.notification_hidden_mode));
-    }
-
-    private void ModoVisivel() {
-        Fala(getString(R.string.modoVisivel));
-        chatHead.setVisibility(View.VISIBLE);
-        if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.STOP) {
-            ShowReadyPreview();
-        } else if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.RECORD) {
-            if (readyPreviewView != null) {
-                readyPreviewView.setAlpha(1f);
-                readyPreviewView.setVisibility(View.VISIBLE);
-            }
-            txtHead.setVisibility(View.VISIBLE);
-        }
-
-        if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.RECORD) {
-            UpdateNotification(GetRecordingNotificationText());
-        } else if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.VIEW) {
-            UpdateNotification(GetViewingNotificationText());
-        } else {
-            UpdateNotification(GetReadyNotificationText());
-        }
-
     }
 
     private void ShowViewChangingCamera() {
@@ -890,8 +804,8 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     }
 
     private void SetPreviewBubble() {
-        readyPreviewParams.width = dp(CHAT_HEAD_SIZE_DP);
-        readyPreviewParams.height = dp(CHAT_HEAD_SIZE_DP);
+        readyPreviewParams.width = dp(chatHeadSizeDp);
+        readyPreviewParams.height = dp(chatHeadSizeDp);
         readyPreviewParams.gravity = Gravity.CENTER;
         readyPreviewParams.x = params.x;
         readyPreviewParams.y = params.y;
@@ -908,8 +822,36 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         GradientDrawable border = new GradientDrawable();
         border.setShape(GradientDrawable.OVAL);
         border.setColor(Color.TRANSPARENT);
-        border.setStroke(dp(3), color);
+        border.setStroke(dp(BubbleDp(3)), color);
         return border;
+    }
+
+    private void ResizeReadyBubble(int newSizeDp, boolean persist) {
+        if (DroidVideoRecorder.StateRecVideo != DroidConstants.EnumStateRecVideo.STOP) {
+            return;
+        }
+
+        chatHeadSizeDp = Math.max(CHAT_HEAD_MIN_SIZE_DP, Math.min(CHAT_HEAD_MAX_SIZE_DP, newSizeDp));
+        params.width = dp(chatHeadSizeDp);
+        params.height = dp(chatHeadSizeDp);
+        readyPreviewParams.width = dp(chatHeadSizeDp);
+        readyPreviewParams.height = dp(chatHeadSizeDp);
+        txtCameraBadge.setPadding(0, 0, 0, dp(BubbleDp(5)));
+        txtCameraBadge.setTextSize(BubbleTextSize(9));
+        chatHead.setBackground(CreatePreviewBorder(Color.rgb(49, 184, 96)));
+
+        try {
+            windowManager.updateViewLayout(readyPreviewView, readyPreviewParams);
+            windowManager.updateViewLayout(chatHead, params);
+            windowManager.updateViewLayout(txtHead, params);
+            windowManager.updateViewLayout(txtCameraBadge, params);
+        } catch (Exception ex) {
+            Log.d("DVR", ex.getMessage());
+        }
+
+        if (persist) {
+            DroidPrefsUtils.salvaTamanhoBolinha(context, chatHeadSizeDp);
+        }
     }
 
     private final Runnable palmCountdownStep = new Runnable() {
@@ -956,7 +898,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         palmCountdownActive = true;
         palmCountdownValue = 3;
         PausePalmGestureDetection();
-        txtHead.setTextSize(30);
+        txtHead.setTextSize(BubbleTextSize(30));
         txtHead.setGravity(Gravity.CENTER);
         txtHead.setPadding(0, 0, 0, 0);
         txtHead.setVisibility(View.VISIBLE);
@@ -1892,6 +1834,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
 
         private final int touchSlop = ViewConfiguration.get(DroidHeadService.this).getScaledTouchSlop();
         private boolean dragStarted;
+        private boolean multiTouchGesture;
 
         private GestureDetector gestureDetector = new GestureDetector(DroidHeadService.this, new GestureDetector.SimpleOnGestureListener() {
 
@@ -1933,11 +1876,51 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
                 return super.onSingleTapConfirmed(e);
             }
         });
+        private ScaleGestureDetector scaleGestureDetector = new ScaleGestureDetector(
+                DroidHeadService.this,
+                new ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                    @Override
+                    public boolean onScaleBegin(ScaleGestureDetector detector) {
+                        return DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.STOP
+                                && !palmCountdownActive
+                                && !trashDragActive;
+                    }
+
+                    @Override
+                    public boolean onScale(ScaleGestureDetector detector) {
+                        int scaledSize = Math.round(chatHeadSizeDp * detector.getScaleFactor());
+                        ResizeReadyBubble(scaledSize, false);
+                        return true;
+                    }
+
+                    @Override
+                    public void onScaleEnd(ScaleGestureDetector detector) {
+                        DroidPrefsUtils.salvaTamanhoBolinha(context, chatHeadSizeDp);
+                    }
+                });
 
         @Override
         public boolean onTouch(View v, MotionEvent event) {
+            int action = event.getActionMasked();
+            if (action == MotionEvent.ACTION_POINTER_DOWN && event.getPointerCount() >= 2) {
+                multiTouchGesture = true;
+                dragStarted = false;
+                if (trashDragActive && !closingFromTrash) {
+                    HideTrashTarget();
+                }
+                CancelSingleFingerGesture(event);
+            }
+
+            scaleGestureDetector.onTouchEvent(event);
+            if (multiTouchGesture) {
+                if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                    multiTouchGesture = false;
+                }
+                return true;
+            }
+
             gestureDetector.onTouchEvent(event);
-            switch (event.getAction()) {
+            switch (action) {
                 case MotionEvent.ACTION_DOWN:
                     initialX = params.x;
                     initialY = params.y;
@@ -2006,6 +1989,13 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
 
         private boolean IsDragGesture(int totalMoveX, int totalMoveY) {
             return totalMoveX * totalMoveX + totalMoveY * totalMoveY >= touchSlop * touchSlop;
+        }
+
+        private void CancelSingleFingerGesture(MotionEvent event) {
+            MotionEvent cancelEvent = MotionEvent.obtain(event);
+            cancelEvent.setAction(MotionEvent.ACTION_CANCEL);
+            gestureDetector.onTouchEvent(cancelEvent);
+            cancelEvent.recycle();
         }
 
     }

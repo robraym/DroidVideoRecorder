@@ -6,7 +6,6 @@ import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Environment;
 import android.preference.PreferenceManager;
-import android.provider.Settings;
 import android.util.Log;
 
 import java.io.File;
@@ -17,19 +16,9 @@ import java.io.File;
 
 public class DroidPrefsUtils {
     private static final String PREF_ULTIMA_CAMERA = "spf_ultimaCamera";
+    private static final String PREF_TAMANHO_BOLINHA = "spf_tamanhoBolinha";
     private static final String CAMERA_FRONTAL = "front";
     private static final String CAMERA_TRASEIRA = "back";
-
-    public static boolean chamadaPorComandoTexto(final Intent intent) {
-        boolean chamadaPorCmdTxt = false;
-        try {
-            chamadaPorCmdTxt = intent.getStringExtra(DroidConstants.CHAMADAPORCOMANDOTEXTO) != null;
-
-        } catch (Exception ex) {
-
-        }
-        return chamadaPorCmdTxt;
-    }
 
     public static boolean chamadaPeloServico(final Intent intent) {
         boolean chamadaPeloServico = false;
@@ -42,22 +31,6 @@ public class DroidPrefsUtils {
         return chamadaPeloServico;
     }
 
-    public static String chamadaBroadCastPorComandoTexto(Intent intent) {
-        String chamadaPorCmdTxt = "";
-        try {
-
-            chamadaPorCmdTxt = intent.getStringExtra(DroidConstants.CHAMADAPORCOMANDOTEXTO);
-            if (chamadaPorCmdTxt == null) {
-                chamadaPorCmdTxt = "";
-            }
-
-        } catch (Exception ex) {
-
-        }
-        return chamadaPorCmdTxt;
-    }
-
-
     public static boolean exibeTelaInicial(final Context context) {
         boolean spf = false;
         try {
@@ -69,34 +42,6 @@ public class DroidPrefsUtils {
         return spf;
 
     }
-
-    public static boolean statusComandoPorTexto(final Context context) {
-        boolean spf = false;
-        try {
-            String sett = Settings.Secure.getString(context.getContentResolver(),"enabled_notification_listeners");
-
-            if (sett != null)
-            {
-                spf = sett.contains(context.getApplicationContext().getPackageName());
-            }
-        } catch (Exception ex) {
-            Log.d("DroidVideo", ex.getMessage());
-        }
-        return spf;
-    }
-
-
-    public static boolean aceitaComandoPorTexto(final Context context) {
-        boolean spf = false;
-        try {
-            SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
-            spf = sp.getBoolean("spf_aceitaComandoPorTexto", false);
-        } catch (Exception ex) {
-            Log.d("DroidVideo", ex.getMessage());
-        }
-        return spf;
-    }
-
 
     public static boolean leComando(final Context context) {
         boolean spf = false;
@@ -132,6 +77,26 @@ public class DroidPrefsUtils {
             Log.d("DroidVideo", ex.getMessage());
         }
         return spf;
+    }
+
+    public static int obtemTamanhoBolinha(final Context context, int tamanhoPadrao, int tamanhoMinimo, int tamanhoMaximo) {
+        int tamanho = tamanhoPadrao;
+        try {
+            SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
+            tamanho = sp.getInt(PREF_TAMANHO_BOLINHA, tamanhoPadrao);
+        } catch (Exception ex) {
+            Log.d("DroidVideo", ex.getMessage());
+        }
+        return Math.max(tamanhoMinimo, Math.min(tamanhoMaximo, tamanho));
+    }
+
+    public static void salvaTamanhoBolinha(final Context context, int tamanho) {
+        try {
+            SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
+            sp.edit().putInt(PREF_TAMANHO_BOLINHA, tamanho).apply();
+        } catch (Exception ex) {
+            Log.d("DroidVideo", ex.getMessage());
+        }
     }
 
     public static int obtemLocalGravacao(final Context context) {

@@ -42,21 +42,5 @@
             android:name=".DroidHeadService"
             android:exported="false"
             android:foregroundServiceType="camera|microphone"></service>
-        <receiver
-            android:name=".DroidReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="DVRREC" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </receiver>
-        <service
-            android:name=".DroidNotification"
-            android:exported="true"
-            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
-            <intent-filter>
-                <action android:name="android.service.notification.NotificationListenerService"></action>
-            </intent-filter>
-        </service>
     </application>
 </manifest>

@@ -20,9 +20,6 @@ public class DroidConstants {
 
 
     public static final String CHAMADAPELOSERVICO = "chamadaPeloServico";
-    public static final String CHAMADAPORCOMANDOTEXTO = "chamadaPorComandoDeTexto";
-    public static final String CHAVERECEIVER = "DVRREC";
-    public static final String COMANDOINICIADOPOR = "DVR=";
     public static final String PASTADOSARQUIVOSGRAVADOS = "/DroidVideoRecorder/";
 
 }
