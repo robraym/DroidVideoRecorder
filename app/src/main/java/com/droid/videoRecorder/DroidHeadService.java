@@ -1049,36 +1049,29 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
                 AudioTrack audioTrack = null;
                 try {
                     int sampleRate = 44100;
-                    int durationMs = 280;
+                    int durationMs = 320;
                     int sampleCount = sampleRate * durationMs / 1000;
                     short[] pcm = new short[sampleCount];
-                    double lowNoise = 0d;
-                    double highNoise = 0d;
-                    double thudPhase = 0d;
+                    double filteredNoise = 0d;
+                    double tonePhase = 0d;
 
                     for (int i = 0; i < sampleCount; i++) {
-                        double time = i / (double) sampleRate;
                         double progress = i / (double) sampleCount;
                         double noise = DeterministicNoise(i);
-                        double sharpNoise = DeterministicNoise(i * 7 + 31);
 
-                        lowNoise = lowNoise * 0.92d + noise * 0.08d;
-                        highNoise = highNoise * 0.48d + sharpNoise * 0.52d;
-                        double air = highNoise - lowNoise;
-                        double airEnvelope = Math.min(1d, progress / 0.035d) * Math.pow(1d - progress, 2.6d);
+                        filteredNoise = filteredNoise * 0.72d + noise * 0.28d;
+                        double airEnvelope = Math.min(1d, progress / 0.08d) * Math.pow(1d - progress, 3.1d);
 
-                        double thudStart = 0.46d;
-                        double thudProgress = Math.max(0d, (progress - thudStart) / (1d - thudStart));
-                        thudPhase += 2d * Math.PI * 92d / sampleRate;
-                        double thudEnvelope = thudProgress > 0d
-                                ? Math.sin(Math.PI * Math.min(thudProgress * 2.4d, 1d)) * Math.exp(-8.5d * thudProgress)
+                        double toneStart = 0.36d;
+                        double toneProgress = Math.max(0d, (progress - toneStart) / (1d - toneStart));
+                        double toneFrequency = 156d - toneProgress * 48d;
+                        tonePhase += 2d * Math.PI * toneFrequency / sampleRate;
+                        double toneEnvelope = toneProgress > 0d
+                                ? Math.sin(Math.PI * Math.min(toneProgress * 1.65d, 1d)) * Math.exp(-6.2d * toneProgress)
                                 : 0d;
-                        double thud = Math.sin(thudPhase) * thudEnvelope;
+                        double softTone = Math.sin(tonePhase) * toneEnvelope;
 
-                        double clickEnvelope = Math.exp(-120d * time);
-                        double click = Math.sin(2d * Math.PI * 1800d * time) * clickEnvelope;
-
-                        double sample = air * airEnvelope * 0.22d + thud * 0.34d + click * 0.045d;
+                        double sample = filteredNoise * airEnvelope * 0.062d + softTone * 0.12d;
                         sample = Math.max(-1d, Math.min(1d, sample));
                         pcm[i] = (short) (sample * Short.MAX_VALUE);
                     }
