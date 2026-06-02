@@ -8,9 +8,18 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.LinearGradient;
 import android.graphics.Outline;
+import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.PixelFormat;
+import android.graphics.RectF;
+import android.graphics.Shader;
 import android.graphics.SurfaceTexture;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -18,10 +27,17 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.media.AudioManager;
+import android.media.AudioFormat;
+import android.media.AudioTrack;
 import android.os.*;
 import android.speech.tts.TextToSpeech;
 import android.util.Log;
 import android.view.*;
+import android.view.animation.AccelerateInterpolator;
+import android.view.animation.DecelerateInterpolator;
+import android.view.animation.LinearInterpolator;
+import android.view.animation.OvershootInterpolator;
 import android.widget.ImageView;
 import android.widget.TextView;
 
@@ -34,7 +50,8 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     private static final int FOREGROUND_NOTIFICATION_ID = 100;
     private static final String NOTIFICATION_CHANNEL_ID = "droid_video_recorder_service";
     private static final int CHAT_HEAD_SIZE_DP = 122;
-    private static final int TRASH_TARGET_SIZE_DP = 72;
+    private static final int TRASH_TARGET_WIDTH_DP = 104;
+    private static final int TRASH_TARGET_HEIGHT_DP = 108;
     private static final float TWIST_THRESHOLD = 5.5f;
     private static final long TWIST_SEQUENCE_TIMEOUT_MS = 900;
     private static final long TWIST_COOLDOWN_MS = 1800;
@@ -42,7 +59,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
 
     private WindowManager windowManager;
     private ImageView chatHead;
-    private ImageView trashTarget;
+    private TrashTargetView trashTarget;
     private TextView txtHead;
     private TextView txtCameraBadge;
     private SurfaceView mSurfaceView;
@@ -61,6 +78,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     private boolean pendingReadyPreview;
     private boolean trashDragActive;
     private boolean trashTargetHighlighted;
+    private boolean closingFromTrash;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private SensorManager sensorManager;
     private Sensor gyroscopeSensor;
@@ -415,20 +433,19 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         txtCameraBadge.setTextSize(9);
         txtCameraBadge.setShadowLayer(3, 0, 1, Color.BLACK);
         txtCameraBadge.setVisibility(View.INVISIBLE);
-        trashTarget = new ImageView(context);
-        trashTarget.setImageResource(android.R.drawable.ic_menu_delete);
-        trashTarget.setColorFilter(Color.WHITE);
-        trashTarget.setPadding(dp(18), dp(18), dp(18), dp(18));
-        trashTarget.setBackground(CreateTrashTargetBackground(false));
+        trashTarget = new TrashTargetView(context);
         trashTarget.setVisibility(View.INVISIBLE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            trashTarget.setElevation(dp(12));
+        }
 
         params.gravity = Gravity.CENTER;
         surfaceParams.gravity = Gravity.CENTER;
         readyPreviewParams.gravity = Gravity.CENTER;
-        trashTargetParams.width = dp(TRASH_TARGET_SIZE_DP);
-        trashTargetParams.height = dp(TRASH_TARGET_SIZE_DP);
+        trashTargetParams.width = dp(TRASH_TARGET_WIDTH_DP);
+        trashTargetParams.height = dp(TRASH_TARGET_HEIGHT_DP);
         trashTargetParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-        trashTargetParams.y = dp(28);
+        trashTargetParams.y = dp(18);
         windowManager.addView(mSurfaceView, surfaceParams);
         windowManager.addView(readyPreviewView, readyPreviewParams);
         windowManager.addView(chatHead, params);
@@ -865,38 +882,125 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         return border;
     }
 
-    private GradientDrawable CreateTrashTargetBackground(boolean highlighted) {
-        GradientDrawable background = new GradientDrawable();
-        background.setShape(GradientDrawable.OVAL);
-        background.setColor(highlighted
-                ? Color.rgb(198, 48, 54)
-                : Color.rgb(75, 78, 84));
-        return background;
-    }
-
     private void ShowTrashTarget() {
         trashDragActive = true;
+        trashTarget.animate().cancel();
+        trashTarget.ResetAnimationState();
         UpdateTrashTarget(false);
         trashTarget.setVisibility(View.VISIBLE);
+        trashTarget.setAlpha(0f);
+        trashTarget.setScaleX(0.72f);
+        trashTarget.setScaleY(0.72f);
+        trashTarget.animate()
+                .alpha(1f)
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(210)
+                .setInterpolator(new OvershootInterpolator(1.6f))
+                .start();
     }
 
     private void HideTrashTarget() {
         trashDragActive = false;
         UpdateTrashTarget(false);
-        trashTarget.setVisibility(View.INVISIBLE);
+        trashTarget.animate().cancel();
+        trashTarget.animate()
+                .alpha(0f)
+                .scaleX(0.82f)
+                .scaleY(0.82f)
+                .setDuration(130)
+                .setInterpolator(new AccelerateInterpolator())
+                .withEndAction(new Runnable() {
+                    @Override
+                    public void run() {
+                        trashTarget.setVisibility(View.INVISIBLE);
+                        trashTarget.ResetAnimationState();
+                    }
+                })
+                .start();
     }
 
     private void UpdateTrashTarget(boolean highlighted) {
+        if (closingFromTrash) {
+            return;
+        }
         trashTargetHighlighted = highlighted;
-        trashTarget.setBackground(CreateTrashTargetBackground(highlighted));
-        trashTarget.setScaleX(highlighted ? 1.12f : 1f);
-        trashTarget.setScaleY(highlighted ? 1.12f : 1f);
+        trashTarget.SetHighlighted(highlighted);
+        trashTarget.animate().cancel();
+        trashTarget.animate()
+                .scaleX(highlighted ? 1.08f : 1f)
+                .scaleY(highlighted ? 1.08f : 1f)
+                .rotation(0f)
+                .setDuration(highlighted ? 170 : 140)
+                .setInterpolator(highlighted ? new OvershootInterpolator(1.4f) : new DecelerateInterpolator())
+                .start();
         if (highlighted) {
+            AnimateBubbleCapturedByTrash();
             ShowChatHeadIcon(R.mipmap.closerec);
             chatHead.setBackground(CreatePreviewBorder(Color.rgb(232, 65, 72)));
         } else {
+            RestoreBubbleDragAppearance();
             RestoreBubbleAppearance();
         }
+    }
+
+    private void AnimateBubbleCapturedByTrash() {
+        chatHead.animate().cancel();
+        txtHead.animate().cancel();
+        txtCameraBadge.animate().cancel();
+        readyPreviewView.animate().cancel();
+        chatHead.animate()
+                .scaleX(0.76f)
+                .scaleY(0.76f)
+                .alpha(0.82f)
+                .rotation(8f)
+                .setDuration(150)
+                .setInterpolator(new DecelerateInterpolator())
+                .start();
+        readyPreviewView.animate()
+                .scaleX(0.76f)
+                .scaleY(0.76f)
+                .alpha(0.82f)
+                .rotation(8f)
+                .setDuration(150)
+                .setInterpolator(new DecelerateInterpolator())
+                .start();
+        txtHead.animate()
+                .scaleX(0.82f)
+                .scaleY(0.82f)
+                .alpha(0.72f)
+                .setDuration(150)
+                .start();
+        txtCameraBadge.animate()
+                .scaleX(0.82f)
+                .scaleY(0.82f)
+                .alpha(0.72f)
+                .setDuration(150)
+                .start();
+    }
+
+    private void RestoreBubbleDragAppearance() {
+        RestoreAnimatedView(chatHead);
+        RestoreAnimatedView(readyPreviewView);
+        RestoreAnimatedView(txtHead);
+        RestoreAnimatedView(txtCameraBadge);
+    }
+
+    private void RestoreAnimatedView(View view) {
+        if (view == null) {
+            return;
+        }
+        view.animate().cancel();
+        view.animate()
+                .translationX(0f)
+                .translationY(0f)
+                .scaleX(1f)
+                .scaleY(1f)
+                .alpha(1f)
+                .rotation(0f)
+                .setDuration(140)
+                .setInterpolator(new DecelerateInterpolator())
+                .start();
     }
 
     private void RestoreBubbleAppearance() {
@@ -916,17 +1020,179 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         float centerY = location[1] + trashTarget.getHeight() / 2f;
         float distanceX = event.getRawX() - centerX;
         float distanceY = event.getRawY() - centerY;
-        float targetRadius = trashTarget.getWidth() / 2f + dp(24);
-        return distanceX * distanceX + distanceY * distanceY <= targetRadius * targetRadius;
+        float radiusX = trashTarget.getWidth() / 2f + dp(24);
+        float radiusY = trashTarget.getHeight() / 2f + dp(28);
+        return (distanceX * distanceX) / (radiusX * radiusX)
+                + (distanceY * distanceY) / (radiusY * radiusY) <= 1f;
     }
 
     private void CloseFromTrashTarget() {
+        if (closingFromTrash) {
+            return;
+        }
+        closingFromTrash = true;
+        trashDragActive = false;
         if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.RECORD) {
-            PararEFechar();
+            Fala(getString(R.string.parandoGravacao));
+            ShowStopRecord(true);
         } else {
             Fala(getString(R.string.fechando));
-            StopService();
         }
+        PlayTrashExitSound();
+        AnimateTrashExitAndStop();
+    }
+
+    private void PlayTrashExitSound() {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                AudioTrack audioTrack = null;
+                try {
+                    int sampleRate = 44100;
+                    int durationMs = 280;
+                    int sampleCount = sampleRate * durationMs / 1000;
+                    short[] pcm = new short[sampleCount];
+                    double lowNoise = 0d;
+                    double highNoise = 0d;
+                    double thudPhase = 0d;
+
+                    for (int i = 0; i < sampleCount; i++) {
+                        double time = i / (double) sampleRate;
+                        double progress = i / (double) sampleCount;
+                        double noise = DeterministicNoise(i);
+                        double sharpNoise = DeterministicNoise(i * 7 + 31);
+
+                        lowNoise = lowNoise * 0.92d + noise * 0.08d;
+                        highNoise = highNoise * 0.48d + sharpNoise * 0.52d;
+                        double air = highNoise - lowNoise;
+                        double airEnvelope = Math.min(1d, progress / 0.035d) * Math.pow(1d - progress, 2.6d);
+
+                        double thudStart = 0.46d;
+                        double thudProgress = Math.max(0d, (progress - thudStart) / (1d - thudStart));
+                        thudPhase += 2d * Math.PI * 92d / sampleRate;
+                        double thudEnvelope = thudProgress > 0d
+                                ? Math.sin(Math.PI * Math.min(thudProgress * 2.4d, 1d)) * Math.exp(-8.5d * thudProgress)
+                                : 0d;
+                        double thud = Math.sin(thudPhase) * thudEnvelope;
+
+                        double clickEnvelope = Math.exp(-120d * time);
+                        double click = Math.sin(2d * Math.PI * 1800d * time) * clickEnvelope;
+
+                        double sample = air * airEnvelope * 0.22d + thud * 0.34d + click * 0.045d;
+                        sample = Math.max(-1d, Math.min(1d, sample));
+                        pcm[i] = (short) (sample * Short.MAX_VALUE);
+                    }
+
+                    audioTrack = new AudioTrack(
+                            AudioManager.STREAM_MUSIC,
+                            sampleRate,
+                            AudioFormat.CHANNEL_OUT_MONO,
+                            AudioFormat.ENCODING_PCM_16BIT,
+                            pcm.length * 2,
+                            AudioTrack.MODE_STATIC);
+                    audioTrack.write(pcm, 0, pcm.length);
+                    audioTrack.play();
+                    Thread.sleep(durationMs + 120);
+                } catch (Exception ex) {
+                    Log.d("DVR", "Nao foi possivel tocar som da lixeira: " + ex.getMessage());
+                } finally {
+                    if (audioTrack != null) {
+                        audioTrack.release();
+                    }
+                }
+            }
+        }).start();
+    }
+
+    private double DeterministicNoise(int seed) {
+        double value = Math.sin(seed * 12.9898d + 78.233d) * 43758.5453d;
+        return (value - Math.floor(value)) * 2d - 1d;
+    }
+
+    private void AnimateTrashExitAndStop() {
+        trashTargetHighlighted = true;
+        trashTarget.SetHighlighted(true);
+        trashTarget.setVisibility(View.VISIBLE);
+        trashTarget.setAlpha(1f);
+        trashTarget.animate().cancel();
+        trashTarget.animate()
+                .scaleX(1.12f)
+                .scaleY(1.12f)
+                .rotation(0f)
+                .setDuration(120)
+                .setInterpolator(new OvershootInterpolator(1.2f))
+                .start();
+
+        AnimateClosingView(chatHead, true);
+        AnimateClosingView(readyPreviewView, false);
+        AnimateClosingView(txtHead, false);
+        AnimateClosingView(txtCameraBadge, false);
+    }
+
+    private void AnimateClosingView(View view, boolean finishAfterAnimation) {
+        if (view == null) {
+            if (finishAfterAnimation) {
+                AnimateTrashEvaporationAndStop();
+            }
+            return;
+        }
+
+        int[] viewLocation = new int[2];
+        int[] trashLocation = new int[2];
+        view.getLocationOnScreen(viewLocation);
+        trashTarget.getLocationOnScreen(trashLocation);
+        float viewCenterX = viewLocation[0] + view.getWidth() / 2f;
+        float viewCenterY = viewLocation[1] + view.getHeight() / 2f;
+        float trashCenterX = trashLocation[0] + trashTarget.getWidth() / 2f;
+        float trashCenterY = trashLocation[1] + trashTarget.getHeight() / 2f;
+
+        view.animate().cancel();
+        view.animate()
+                .translationX(trashCenterX - viewCenterX)
+                .translationY(trashCenterY - viewCenterY)
+                .scaleX(0.08f)
+                .scaleY(0.08f)
+                .alpha(0f)
+                .rotation(34f)
+                .setDuration(430)
+                .setInterpolator(new AccelerateInterpolator())
+                .setListener(finishAfterAnimation ? new AnimatorListenerAdapter() {
+                    @Override
+                    public void onAnimationEnd(Animator animation) {
+                        AnimateTrashEvaporationAndStop();
+                    }
+                } : null)
+                .start();
+    }
+
+    private void AnimateTrashEvaporationAndStop() {
+        final ValueAnimator evaporation = ValueAnimator.ofFloat(0f, 1f);
+        evaporation.setDuration(520);
+        evaporation.setInterpolator(new DecelerateInterpolator());
+        evaporation.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            @Override
+            public void onAnimationUpdate(ValueAnimator animation) {
+                trashTarget.SetEvaporationProgress((Float) animation.getAnimatedValue());
+            }
+        });
+        evaporation.start();
+
+        trashTarget.animate().cancel();
+        trashTarget.animate()
+                .scaleX(1.18f)
+                .scaleY(1.18f)
+                .alpha(0f)
+                .rotation(0f)
+                .setDuration(520)
+                .setInterpolator(new DecelerateInterpolator())
+                .setListener(new AnimatorListenerAdapter() {
+                    @Override
+                    public void onAnimationEnd(Animator animation) {
+                        trashTarget.StopPulse();
+                        StopService();
+                    }
+                })
+                .start();
     }
 
     private void ShowChatHeadIcon(int resourceId) {
@@ -1064,7 +1330,255 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         }
     }
 
+    private class TrashTargetView extends View {
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final RectF rect = new RectF();
+        private final Path path = new Path();
+        private boolean highlighted;
+        private float evaporationProgress;
+        private float highlightPulse;
+        private ValueAnimator pulseAnimator;
+
+        public TrashTargetView(Context context) {
+            super(context);
+            setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+            setWillNotDraw(false);
+        }
+
+        public void SetHighlighted(boolean highlighted) {
+            if (this.highlighted == highlighted) {
+                invalidate();
+                return;
+            }
+            this.highlighted = highlighted;
+            if (highlighted) {
+                StartPulse();
+            } else {
+                StopPulse();
+            }
+            invalidate();
+        }
+
+        public void SetEvaporationProgress(float evaporationProgress) {
+            this.evaporationProgress = evaporationProgress;
+            invalidate();
+        }
+
+        public void ResetAnimationState() {
+            setAlpha(1f);
+            setScaleX(1f);
+            setScaleY(1f);
+            setRotation(0f);
+            StopPulse();
+            SetEvaporationProgress(0f);
+            SetHighlighted(false);
+        }
+
+        private void StartPulse() {
+            StopPulse();
+            pulseAnimator = ValueAnimator.ofFloat(0f, 1f);
+            pulseAnimator.setDuration(920);
+            pulseAnimator.setRepeatCount(ValueAnimator.INFINITE);
+            pulseAnimator.setInterpolator(new LinearInterpolator());
+            pulseAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+                @Override
+                public void onAnimationUpdate(ValueAnimator animation) {
+                    highlightPulse = (Float) animation.getAnimatedValue();
+                    invalidate();
+                }
+            });
+            pulseAnimator.start();
+        }
+
+        private void StopPulse() {
+            if (pulseAnimator != null) {
+                pulseAnimator.cancel();
+                pulseAnimator = null;
+            }
+            highlightPulse = 0f;
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            float width = getWidth();
+            float height = getHeight();
+            float centerX = width / 2f;
+            float centerY = height / 2f + dp(3);
+            float alphaMultiplier = 1f - evaporationProgress;
+
+            DrawTargetCard(canvas, width, height, alphaMultiplier);
+            if (evaporationProgress < 0.78f) {
+                DrawTrashIcon(canvas, centerX, centerY, alphaMultiplier);
+            }
+            DrawSubtleHoverDust(canvas, width, centerX, centerY);
+            DrawDissolveParticles(canvas, width, height, centerX, centerY);
+        }
+
+        private void DrawTargetCard(Canvas canvas, float width, float height, float alphaMultiplier) {
+            int alpha = Math.max(0, Math.min(255, (int) (255 * alphaMultiplier)));
+
+            paint.reset();
+            paint.setAntiAlias(true);
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(Color.argb((int) ((highlighted ? 220 : 190) * alphaMultiplier), 30, 33, 39));
+            paint.setShadowLayer(dp(highlighted ? 18 : 11), 0, dp(6),
+                    Color.argb((int) ((highlighted ? 145 : 100) * alphaMultiplier), 0, 0, 0));
+            rect.set(dp(9), dp(9), width - dp(9), height - dp(9));
+            canvas.drawRoundRect(rect, dp(28), dp(28), paint);
+
+            paint.clearShadowLayer();
+            paint.setShader(new LinearGradient(
+                    0f,
+                    rect.top,
+                    0f,
+                    rect.bottom,
+                    new int[]{
+                            Color.argb((int) (70 * alphaMultiplier), 255, 255, 255),
+                            Color.argb((int) (12 * alphaMultiplier), 255, 255, 255),
+                            Color.argb((int) (48 * alphaMultiplier), 0, 0, 0)
+                    },
+                    new float[]{0f, 0.42f, 1f},
+                    Shader.TileMode.CLAMP));
+            canvas.drawRoundRect(rect, dp(28), dp(28), paint);
+            paint.setShader(null);
+
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(dp(1));
+            paint.setColor(Color.argb((int) ((highlighted ? 155 : 95) * alphaMultiplier), 245, 248, 252));
+            canvas.drawRoundRect(rect, dp(26), dp(26), paint);
+
+            if (highlighted) {
+                paint.setStyle(Paint.Style.STROKE);
+                paint.setStrokeWidth(dp(2));
+                paint.setColor(Color.argb((int) (95 * alphaMultiplier), 120, 170, 255));
+                rect.set(dp(13), dp(13), width - dp(13), height - dp(13));
+                canvas.drawRoundRect(rect, dp(24), dp(24), paint);
+            }
+        }
+
+        private void DrawTrashIcon(Canvas canvas, float centerX, float centerY, float alphaMultiplier) {
+            int alpha = Math.max(0, Math.min(255, (int) (255 * alphaMultiplier)));
+            float bodyTop = centerY - dp(1);
+            float bodyBottom = centerY + dp(35);
+            float bodyLeft = centerX - dp(24);
+            float bodyRight = centerX + dp(24);
+
+            paint.reset();
+            paint.setAntiAlias(true);
+            paint.setStyle(Paint.Style.FILL);
+            paint.setShader(new LinearGradient(
+                    bodyLeft,
+                    bodyTop,
+                    bodyRight,
+                    bodyBottom,
+                    new int[]{
+                            Color.argb(alpha, 242, 245, 248),
+                            Color.argb(alpha, 184, 194, 204),
+                            Color.argb(alpha, 238, 241, 245)
+                    },
+                    new float[]{0f, 0.52f, 1f},
+                    Shader.TileMode.CLAMP));
+            path.reset();
+            path.moveTo(bodyLeft + dp(5), bodyTop);
+            path.lineTo(bodyRight - dp(5), bodyTop);
+            path.lineTo(bodyRight - dp(10), bodyBottom);
+            path.lineTo(bodyLeft + dp(10), bodyBottom);
+            path.close();
+            canvas.drawPath(path, paint);
+            paint.setShader(null);
+
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(dp(2));
+            paint.setStrokeCap(Paint.Cap.ROUND);
+            paint.setStrokeJoin(Paint.Join.ROUND);
+            paint.setColor(Color.argb((int) (145 * alphaMultiplier), 255, 255, 255));
+            canvas.drawLine(centerX - dp(12), bodyTop + dp(8), centerX - dp(9), bodyBottom - dp(8), paint);
+            canvas.drawLine(centerX, bodyTop + dp(7), centerX, bodyBottom - dp(7), paint);
+            canvas.drawLine(centerX + dp(12), bodyTop + dp(8), centerX + dp(9), bodyBottom - dp(8), paint);
+
+            paint.setColor(Color.argb((int) (80 * alphaMultiplier), 35, 39, 45));
+            canvas.drawLine(bodyLeft + dp(8), bodyBottom, bodyRight - dp(8), bodyBottom, paint);
+
+            float lidY = centerY - dp(16);
+            float lidPivotX = centerX - dp(28);
+            float lidPivotY = lidY + dp(6);
+            float openAngle = highlighted ? -30f - highlightPulse * 4f : -2f;
+            canvas.save();
+            canvas.rotate(openAngle, lidPivotX, lidPivotY);
+            paint.setStyle(Paint.Style.FILL);
+            paint.setShader(new LinearGradient(
+                    centerX - dp(30),
+                    lidY - dp(5),
+                    centerX + dp(30),
+                    lidY + dp(8),
+                    Color.argb(alpha, 250, 252, 255),
+                    Color.argb(alpha, 178, 188, 199),
+                    Shader.TileMode.CLAMP));
+            rect.set(centerX - dp(31), lidY - dp(4), centerX + dp(31), lidY + dp(7));
+            canvas.drawRoundRect(rect, dp(5), dp(5), paint);
+            paint.setShader(null);
+
+            paint.setColor(Color.argb(alpha, 238, 242, 246));
+            rect.set(centerX - dp(10), lidY - dp(13), centerX + dp(10), lidY - dp(6));
+            canvas.drawRoundRect(rect, dp(4), dp(4), paint);
+            canvas.restore();
+        }
+
+        private void DrawSubtleHoverDust(Canvas canvas, float width, float centerX, float centerY) {
+            if (!highlighted || evaporationProgress > 0f) {
+                return;
+            }
+            paint.reset();
+            paint.setAntiAlias(true);
+            paint.setStyle(Paint.Style.FILL);
+            int color = Color.rgb(236, 241, 247);
+            for (int i = 0; i < 4; i++) {
+                float seed = i / 3f;
+                float wave = (float) Math.sin((highlightPulse + seed) * Math.PI * 2f);
+                float x = centerX + (seed - 0.5f) * width * 0.36f + wave * dp(2);
+                float y = centerY - dp(42 + i % 2 * 5) - highlightPulse * dp(4);
+                DrawDust(canvas, x, y, dp(1), color, 95);
+            }
+        }
+
+        private void DrawDissolveParticles(Canvas canvas, float width, float height, float centerX, float centerY) {
+            if (evaporationProgress <= 0f) {
+                return;
+            }
+            int[] colors = new int[]{
+                    Color.rgb(236, 240, 244),
+                    Color.rgb(184, 196, 208),
+                    Color.rgb(214, 160, 150)
+            };
+            for (int i = 0; i < 16; i++) {
+                float seed = i / 15f;
+                float angle = (float) (seed * Math.PI * 2.2f + i * 0.41f);
+                float distance = dp(8) + evaporationProgress * dp(38 + (i % 6) * 4);
+                float arc = (float) Math.sin(evaporationProgress * Math.PI);
+                float x = centerX + (float) Math.cos(angle) * distance * 0.72f;
+                float y = centerY + dp(8)
+                        + (float) Math.sin(angle) * distance * 0.38f
+                        - evaporationProgress * dp(36)
+                        - arc * dp(8);
+                int alpha = Math.max(0, (int) (185 * (1f - evaporationProgress * 0.86f)));
+                DrawDust(canvas, x, y, dp(2), colors[i % colors.length], alpha);
+            }
+        }
+
+        private void DrawDust(Canvas canvas, float centerX, float centerY, float size, int color, int alpha) {
+            paint.reset();
+            paint.setAntiAlias(true);
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color)));
+            canvas.drawCircle(centerX, centerY, Math.max(1f, size), paint);
+        }
+    }
+
     public class TouchListener implements View.OnTouchListener {
+
+        private final int touchSlop = ViewConfiguration.get(DroidHeadService.this).getScaledTouchSlop();
+        private boolean dragStarted;
 
         private GestureDetector gestureDetector = new GestureDetector(DroidHeadService.this, new GestureDetector.SimpleOnGestureListener() {
 
@@ -1082,10 +1596,9 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
 
             @Override
             public void onLongPress(MotionEvent e) {
-                ShowTrashTarget();
-                if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.STOP) {
-                    Visualizar();
-                } else if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.VIEW) {
+                if (!dragStarted
+                        && (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.STOP
+                        || DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.VIEW)) {
                     VisualizarTrocandoCamera();
                 }
                 super.onLongPress(e);
@@ -1117,6 +1630,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
                     initialY = params.y;
                     initialTouchX = event.getRawX();
                     initialTouchY = event.getRawY();
+                    dragStarted = false;
                     if (myOrientationEventListener.canDetectOrientation()) {
                         myOrientationEventListener.enable();
                     }
@@ -1126,6 +1640,10 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
                     params.x = initialX + totalMoveX;
                     Integer totalMoveY = (int) (event.getRawY() - initialTouchY);
                     params.y = initialY + totalMoveY;
+                    if (!dragStarted && IsDragGesture(totalMoveX, totalMoveY)) {
+                        dragStarted = true;
+                        ShowTrashTarget();
+                    }
                     windowManager.updateViewLayout(chatHead, params);
                     windowManager.updateViewLayout(txtHead, params);
                     windowManager.updateViewLayout(txtCameraBadge, params);
@@ -1146,20 +1664,25 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
                 case MotionEvent.ACTION_UP:
                     if (trashDragActive) {
                         boolean closeApp = trashTargetHighlighted;
-                        HideTrashTarget();
                         if (closeApp) {
                             CloseFromTrashTarget();
+                        } else {
+                            HideTrashTarget();
                         }
                     }
                     return true;
                 case MotionEvent.ACTION_CANCEL:
-                    if (trashDragActive) {
+                    if (trashDragActive && !closingFromTrash) {
                         HideTrashTarget();
                     }
                     return true;
             }
 
             return true;
+        }
+
+        private boolean IsDragGesture(int totalMoveX, int totalMoveY) {
+            return totalMoveX * totalMoveX + totalMoveY * totalMoveY >= touchSlop * touchSlop;
         }
 
     }
