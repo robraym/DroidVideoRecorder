@@ -80,6 +80,9 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     private boolean trashTargetHighlighted;
     private boolean closingFromTrash;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private PalmGestureDetector palmGestureDetector;
+    private boolean palmCountdownActive;
+    private int palmCountdownValue;
     private SensorManager sensorManager;
     private Sensor gyroscopeSensor;
     private Notification.Builder notificationBuilder;
@@ -223,6 +226,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         if (mSurfaceView != null) windowManager.removeView(mSurfaceView);
         if (readyPreviewView != null) windowManager.removeView(readyPreviewView);
         if (trashTarget != null) windowManager.removeView(trashTarget);
+        if (palmGestureDetector != null) palmGestureDetector.Close();
         if (sensorManager != null) sensorManager.unregisterListener(this);
         Vibrar(100);
     }
@@ -413,6 +417,8 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
                 // Not used
             }
         });
+        palmGestureDetector = new PalmGestureDetector(context, readyPreviewView,
+                () -> mainHandler.post(this::StartPalmRecordingCountdown));
 
         chatHead = new ImageView(context);
         chatHead.setImageResource(R.mipmap.viewrec);
@@ -751,6 +757,8 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     }
 
     private void ShowRec() {
+        CancelPalmRecordingCountdown();
+        PausePalmGestureDetection();
         HideCameraIndicator();
         ShowRecordingPreview();
         SetPreviewFullScreen(false);
@@ -836,9 +844,11 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         HideCameraIndicator();
         SetPreviewBubble();
         StartReadyPreview(DroidVideoRecorder.TypeViewCam);
+        StartPalmGestureDetection();
     }
 
     private void ShowRecordingPreview() {
+        PausePalmGestureDetection();
         pendingReadyPreview = false;
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
             ShowChatHeadIcon(R.mipmap.rec);
@@ -851,6 +861,8 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     }
 
     private void HideReadyPreview() {
+        CancelPalmRecordingCountdown();
+        PausePalmGestureDetection();
         pendingReadyPreview = false;
         if (readyPreviewView != null) {
             readyPreviewView.setVisibility(View.INVISIBLE);
@@ -880,6 +892,66 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         border.setColor(Color.TRANSPARENT);
         border.setStroke(dp(3), color);
         return border;
+    }
+
+    private final Runnable palmCountdownStep = new Runnable() {
+        @Override
+        public void run() {
+            if (!palmCountdownActive
+                    || DroidVideoRecorder.StateRecVideo != DroidConstants.EnumStateRecVideo.STOP) {
+                CancelPalmRecordingCountdown();
+                return;
+            }
+
+            if (palmCountdownValue > 0) {
+                txtHead.setText(String.valueOf(palmCountdownValue));
+                palmCountdownValue--;
+                mainHandler.postDelayed(this, 1000);
+                return;
+            }
+
+            palmCountdownActive = false;
+            txtHead.setVisibility(View.INVISIBLE);
+            Gravar();
+        }
+    };
+
+    private void StartPalmGestureDetection() {
+        if (!palmCountdownActive && palmGestureDetector != null) {
+            palmGestureDetector.Start();
+        }
+    }
+
+    private void PausePalmGestureDetection() {
+        if (palmGestureDetector != null) {
+            palmGestureDetector.Pause();
+        }
+    }
+
+    private void StartPalmRecordingCountdown() {
+        if (palmCountdownActive
+                || trashDragActive
+                || DroidVideoRecorder.StateRecVideo != DroidConstants.EnumStateRecVideo.STOP) {
+            return;
+        }
+
+        palmCountdownActive = true;
+        palmCountdownValue = 3;
+        PausePalmGestureDetection();
+        txtHead.setTextSize(30);
+        txtHead.setGravity(Gravity.CENTER);
+        txtHead.setPadding(0, 0, 0, 0);
+        txtHead.setVisibility(View.VISIBLE);
+        Vibrar(50);
+        mainHandler.post(palmCountdownStep);
+    }
+
+    private void CancelPalmRecordingCountdown() {
+        palmCountdownActive = false;
+        mainHandler.removeCallbacks(palmCountdownStep);
+        if (DroidVideoRecorder.StateRecVideo != DroidConstants.EnumStateRecVideo.RECORD) {
+            txtHead.setVisibility(View.INVISIBLE);
+        }
     }
 
     private void ShowTrashTarget() {
