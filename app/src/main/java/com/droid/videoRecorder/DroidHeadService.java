@@ -34,6 +34,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     private static final int FOREGROUND_NOTIFICATION_ID = 100;
     private static final String NOTIFICATION_CHANNEL_ID = "droid_video_recorder_service";
     private static final int CHAT_HEAD_SIZE_DP = 122;
+    private static final int TRASH_TARGET_SIZE_DP = 72;
     private static final float TWIST_THRESHOLD = 5.5f;
     private static final long TWIST_SEQUENCE_TIMEOUT_MS = 900;
     private static final long TWIST_COOLDOWN_MS = 1800;
@@ -41,6 +42,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
 
     private WindowManager windowManager;
     private ImageView chatHead;
+    private ImageView trashTarget;
     private TextView txtHead;
     private TextView txtCameraBadge;
     private SurfaceView mSurfaceView;
@@ -57,6 +59,8 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     private boolean pendingPreview;
     private DroidConstants.EnumTypeViewCam pendingPreviewCam = DroidConstants.EnumTypeViewCam.FacingBack;
     private boolean pendingReadyPreview;
+    private boolean trashDragActive;
+    private boolean trashTargetHighlighted;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private SensorManager sensorManager;
     private Sensor gyroscopeSensor;
@@ -92,6 +96,13 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             PixelFormat.TRANSLUCENT);
 
     WindowManager.LayoutParams readyPreviewParams = new WindowManager.LayoutParams(
+            1,
+            1,
+            getOverlayWindowType(),
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            PixelFormat.TRANSLUCENT);
+
+    WindowManager.LayoutParams trashTargetParams = new WindowManager.LayoutParams(
             1,
             1,
             getOverlayWindowType(),
@@ -193,6 +204,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         if (txtCameraBadge != null) windowManager.removeView(txtCameraBadge);
         if (mSurfaceView != null) windowManager.removeView(mSurfaceView);
         if (readyPreviewView != null) windowManager.removeView(readyPreviewView);
+        if (trashTarget != null) windowManager.removeView(trashTarget);
         if (sensorManager != null) sensorManager.unregisterListener(this);
         Vibrar(100);
     }
@@ -403,15 +415,26 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         txtCameraBadge.setTextSize(9);
         txtCameraBadge.setShadowLayer(3, 0, 1, Color.BLACK);
         txtCameraBadge.setVisibility(View.INVISIBLE);
+        trashTarget = new ImageView(context);
+        trashTarget.setImageResource(android.R.drawable.ic_menu_delete);
+        trashTarget.setColorFilter(Color.WHITE);
+        trashTarget.setPadding(dp(18), dp(18), dp(18), dp(18));
+        trashTarget.setBackground(CreateTrashTargetBackground(false));
+        trashTarget.setVisibility(View.INVISIBLE);
 
         params.gravity = Gravity.CENTER;
         surfaceParams.gravity = Gravity.CENTER;
         readyPreviewParams.gravity = Gravity.CENTER;
+        trashTargetParams.width = dp(TRASH_TARGET_SIZE_DP);
+        trashTargetParams.height = dp(TRASH_TARGET_SIZE_DP);
+        trashTargetParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+        trashTargetParams.y = dp(28);
         windowManager.addView(mSurfaceView, surfaceParams);
         windowManager.addView(readyPreviewView, readyPreviewParams);
         windowManager.addView(chatHead, params);
         windowManager.addView(txtHead, params);
         windowManager.addView(txtCameraBadge, params);
+        windowManager.addView(trashTarget, trashTargetParams);
         tts = new TextToSpeech(context, this);
 
         DroidVideoRecorder.SetContext(context);
@@ -842,6 +865,70 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         return border;
     }
 
+    private GradientDrawable CreateTrashTargetBackground(boolean highlighted) {
+        GradientDrawable background = new GradientDrawable();
+        background.setShape(GradientDrawable.OVAL);
+        background.setColor(highlighted
+                ? Color.rgb(198, 48, 54)
+                : Color.rgb(75, 78, 84));
+        return background;
+    }
+
+    private void ShowTrashTarget() {
+        trashDragActive = true;
+        UpdateTrashTarget(false);
+        trashTarget.setVisibility(View.VISIBLE);
+    }
+
+    private void HideTrashTarget() {
+        trashDragActive = false;
+        UpdateTrashTarget(false);
+        trashTarget.setVisibility(View.INVISIBLE);
+    }
+
+    private void UpdateTrashTarget(boolean highlighted) {
+        trashTargetHighlighted = highlighted;
+        trashTarget.setBackground(CreateTrashTargetBackground(highlighted));
+        trashTarget.setScaleX(highlighted ? 1.12f : 1f);
+        trashTarget.setScaleY(highlighted ? 1.12f : 1f);
+        if (highlighted) {
+            ShowChatHeadIcon(R.mipmap.closerec);
+            chatHead.setBackground(CreatePreviewBorder(Color.rgb(232, 65, 72)));
+        } else {
+            RestoreBubbleAppearance();
+        }
+    }
+
+    private void RestoreBubbleAppearance() {
+        if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.RECORD) {
+            chatHead.setImageDrawable(null);
+            chatHead.setBackground(CreatePreviewBorder(Color.rgb(232, 65, 72)));
+        } else if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.STOP) {
+            chatHead.setImageDrawable(null);
+            chatHead.setBackground(CreatePreviewBorder(Color.rgb(49, 184, 96)));
+        }
+    }
+
+    private boolean IsPointerOverTrashTarget(MotionEvent event) {
+        int[] location = new int[2];
+        trashTarget.getLocationOnScreen(location);
+        float centerX = location[0] + trashTarget.getWidth() / 2f;
+        float centerY = location[1] + trashTarget.getHeight() / 2f;
+        float distanceX = event.getRawX() - centerX;
+        float distanceY = event.getRawY() - centerY;
+        float targetRadius = trashTarget.getWidth() / 2f + dp(24);
+        return distanceX * distanceX + distanceY * distanceY <= targetRadius * targetRadius;
+    }
+
+    private void CloseFromTrashTarget() {
+        if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.RECORD) {
+            PararEFechar();
+        } else {
+            Fala(getString(R.string.fechando));
+            StopService();
+        }
+    }
+
     private void ShowChatHeadIcon(int resourceId) {
         chatHead.setBackground(null);
         chatHead.setImageResource(resourceId);
@@ -985,19 +1072,17 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             public boolean onDoubleTap(MotionEvent e) {
 
                 if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.STOP) {
-                    Fechar();
-                } else if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.CLOSE) {
-                    AbrirConfig();
-                    ShowStop();
+                    Visualizar();
                 } else if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.VIEW) {
-                    GetDefaultStop();
+                    VisualizarTrocandoCamera();
                 }
 
-                return super.onDoubleTap(e);
+                return true;
             }
 
             @Override
             public void onLongPress(MotionEvent e) {
+                ShowTrashTarget();
                 if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.STOP) {
                     Visualizar();
                 } else if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.VIEW) {
@@ -1050,6 +1135,26 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
                         readyPreviewParams.x = params.x;
                         readyPreviewParams.y = params.y;
                         windowManager.updateViewLayout(readyPreviewView, readyPreviewParams);
+                    }
+                    if (trashDragActive) {
+                        boolean pointerOverTrashTarget = IsPointerOverTrashTarget(event);
+                        if (pointerOverTrashTarget != trashTargetHighlighted) {
+                            UpdateTrashTarget(pointerOverTrashTarget);
+                        }
+                    }
+                    return true;
+                case MotionEvent.ACTION_UP:
+                    if (trashDragActive) {
+                        boolean closeApp = trashTargetHighlighted;
+                        HideTrashTarget();
+                        if (closeApp) {
+                            CloseFromTrashTarget();
+                        }
+                    }
+                    return true;
+                case MotionEvent.ACTION_CANCEL:
+                    if (trashDragActive) {
+                        HideTrashTarget();
                     }
                     return true;
             }
