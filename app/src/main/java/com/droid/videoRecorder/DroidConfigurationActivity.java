@@ -27,11 +27,14 @@ import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.lang.ref.WeakReference;
+
 /**
  * Created by Robson on 12/01/2016.
  */
 public class DroidConfigurationActivity extends Activity {
     private static final int REQUEST_RUNTIME_PERMISSIONS = 1001;
+    private static WeakReference<DroidConfigurationActivity> activeActivity = new WeakReference<>(null);
 
     private Context context;
     private SharedPreferences preferences;
@@ -65,6 +68,7 @@ public class DroidConfigurationActivity extends Activity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        activeActivity = new WeakReference<>(this);
         context = getBaseContext();
         preferences = PreferenceManager.getDefaultSharedPreferences(context);
         boolean exibeTelaInicial = ExibeTelaInicial();
@@ -85,6 +89,21 @@ public class DroidConfigurationActivity extends Activity {
         }
 
         StartServiceWhenReady(chamadaPeloServico);
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (activeActivity.get() == this) {
+            activeActivity.clear();
+        }
+        super.onDestroy();
+    }
+
+    public static void CloseIfOpen() {
+        DroidConfigurationActivity activity = activeActivity.get();
+        if (activity != null && !activity.isFinishing()) {
+            activity.runOnUiThread(activity::finish);
+        }
     }
 
     private void BuildSettingsScreen() {

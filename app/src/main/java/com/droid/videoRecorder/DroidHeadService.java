@@ -576,6 +576,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     }
 
     private void StopService() {
+        DroidConfigurationActivity.CloseIfOpen();
         stopSelf();
         tts.shutdown();
     }
