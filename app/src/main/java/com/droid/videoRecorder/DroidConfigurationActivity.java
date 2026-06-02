@@ -41,6 +41,9 @@ public class DroidConfigurationActivity extends Activity {
     private boolean serviceStarted;
     private boolean startupServiceRequested;
     private boolean overlayPermissionRequested;
+    private boolean overlayPermissionScreenVisited;
+    private boolean permissionFlowActive;
+    private boolean runtimePermissionRequested;
     static int sdk_int = android.os.Build.VERSION.SDK_INT;
     private static final int COLOR_BACKGROUND = Color.rgb(0, 0, 0);
     private static final int COLOR_GROUP = Color.rgb(28, 29, 33);
@@ -88,7 +91,9 @@ public class DroidConfigurationActivity extends Activity {
 
         if (exibeTelaInicial || chamadaPeloServico || chamadaConfigPorComandoTexto) {
             BuildSettingsScreen();
-        } else finish();
+        } else if (HasRuntimePermissions() && HasOverlayPermission()) {
+            finish();
+        }
 
         StartServiceWhenReady(chamadaPeloServico);
     }
@@ -462,7 +467,23 @@ public class DroidConfigurationActivity extends Activity {
     protected void onResume() {
         super.onResume();
         try {
-            if (!ExibeTelaInicial() && !ChamadaPeloServico() && !ChamadaConfigPorComandoTexto()) {
+            if (overlayPermissionRequested && overlayPermissionScreenVisited) {
+                overlayPermissionRequested = false;
+                overlayPermissionScreenVisited = false;
+                canFinish = true;
+                if (HasOverlayPermission()) {
+                    StartServiceWhenReady(false);
+                } else {
+                    Toast.makeText(this, "Ative a permissão de aparecer sobre outros apps para iniciar o gravador.", Toast.LENGTH_LONG).show();
+                    permissionFlowActive = false;
+                    startupServiceRequested = false;
+                    finish();
+                }
+                return;
+            }
+
+            if (!ExibeTelaInicial() && !ChamadaPeloServico() && !ChamadaConfigPorComandoTexto()
+                    && HasRuntimePermissions() && HasOverlayPermission()) {
                 finish();
             } else {
                 if (sdk_int >= 21 && commandSwitch != null) {
@@ -484,19 +505,28 @@ public class DroidConfigurationActivity extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
-        if (canFinish) finish();
+        if (overlayPermissionRequested) {
+            overlayPermissionScreenVisited = true;
+        }
+        if (canFinish && !permissionFlowActive) {
+            finish();
+        }
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == REQUEST_RUNTIME_PERMISSIONS) {
-            canFinish = true;
-            if (HasRuntimePermissions()) {
-                StartServiceWhenReady(false);
-            } else {
-                Toast.makeText(this, "Permita camera, microfone e armazenamento para iniciar o gravador.", Toast.LENGTH_LONG).show();
+            runtimePermissionRequested = false;
+            if (grantResults.length == 0 || grantResults[0] != PackageManager.PERMISSION_GRANTED) {
+                permissionFlowActive = false;
+                canFinish = true;
+                startupServiceRequested = false;
+                finish();
+                return;
             }
+
+            StartServiceWhenReady(false);
         }
     }
 
@@ -506,21 +536,29 @@ public class DroidConfigurationActivity extends Activity {
         }
 
         startupServiceRequested = true;
+        permissionFlowActive = true;
 
         if (DroidHeadService.IsActive() && ChamadaBroadCastPorComandoTexto().isEmpty()) {
             Toast.makeText(this, getString(R.string.recorder_already_open), Toast.LENGTH_LONG).show();
             serviceStarted = true;
             startupServiceRequested = false;
             overlayPermissionRequested = false;
+            permissionFlowActive = false;
             return;
         }
 
         if (!HasRuntimePermissions()) {
+            if (runtimePermissionRequested) {
+                return;
+            }
             RequestRuntimePermissions();
             return;
         }
 
         if (!HasOverlayPermission()) {
+            if (overlayPermissionRequested) {
+                return;
+            }
             RequestOverlayPermission();
             return;
         }
@@ -530,6 +568,11 @@ public class DroidConfigurationActivity extends Activity {
         startService(intentService);
         serviceStarted = true;
         overlayPermissionRequested = false;
+        startupServiceRequested = false;
+        permissionFlowActive = false;
+        if (!ExibeTelaInicial() && !ChamadaPeloServico() && !ChamadaConfigPorComandoTexto()) {
+            finish();
+        }
     }
 
     private boolean HasRuntimePermissions() {
@@ -556,23 +599,29 @@ public class DroidConfigurationActivity extends Activity {
     private void RequestRuntimePermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             canFinish = false;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                requestPermissions(new String[]{
-                        Manifest.permission.CAMERA,
-                        Manifest.permission.RECORD_AUDIO,
-                        Manifest.permission.POST_NOTIFICATIONS
-                }, REQUEST_RUNTIME_PERMISSIONS);
-            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                requestPermissions(new String[]{
-                        Manifest.permission.CAMERA,
-                        Manifest.permission.RECORD_AUDIO
-                }, REQUEST_RUNTIME_PERMISSIONS);
-            } else {
-                requestPermissions(new String[]{
-                        Manifest.permission.CAMERA,
-                        Manifest.permission.RECORD_AUDIO,
-                        Manifest.permission.WRITE_EXTERNAL_STORAGE
-                }, REQUEST_RUNTIME_PERMISSIONS);
+            if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                runtimePermissionRequested = true;
+                requestPermissions(new String[]{Manifest.permission.CAMERA}, REQUEST_RUNTIME_PERMISSIONS);
+                return;
+            }
+
+            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                runtimePermissionRequested = true;
+                requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQUEST_RUNTIME_PERMISSIONS);
+                return;
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                    && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                runtimePermissionRequested = true;
+                requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQUEST_RUNTIME_PERMISSIONS);
+                return;
+            }
+
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
+                    && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                runtimePermissionRequested = true;
+                requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, REQUEST_RUNTIME_PERMISSIONS);
             }
         }
     }
@@ -583,15 +632,9 @@ public class DroidConfigurationActivity extends Activity {
 
     private void RequestOverlayPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (overlayPermissionRequested) {
-                canFinish = true;
-                Toast.makeText(this, "O gravador precisa da permissao de aparecer sobre outros apps.", Toast.LENGTH_LONG).show();
-                return;
-            }
-
             overlayPermissionRequested = true;
+            overlayPermissionScreenVisited = false;
             canFinish = false;
-            Toast.makeText(this, "Ative a permissao de aparecer sobre outros apps para iniciar o gravador.", Toast.LENGTH_LONG).show();
             Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()));
             startActivity(intent);
         }
