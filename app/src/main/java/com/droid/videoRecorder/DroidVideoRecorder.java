@@ -6,21 +6,42 @@ import android.content.res.Configuration;
 import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
 import android.media.CamcorderProfile;
+import android.media.MediaScannerConnection;
 import android.media.MediaRecorder;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.ParcelFileDescriptor;
 import android.provider.MediaStore;
 import android.view.Surface;
 import android.view.SurfaceHolder;
+import androidx.media3.common.MediaItem;
+import androidx.media3.common.util.UnstableApi;
+import androidx.media3.effect.ScaleAndRotateTransformation;
+import androidx.media3.transformer.Composition;
+import androidx.media3.transformer.EditedMediaItem;
+import androidx.media3.transformer.Effects;
+import androidx.media3.transformer.ExportException;
+import androidx.media3.transformer.ExportResult;
+import androidx.media3.transformer.Transformer;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.text.SimpleDateFormat;
+import java.util.ArrayDeque;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import android.util.Log;
 
+@UnstableApi
 public class DroidVideoRecorder {
     private static Camera mServiceCamera;
     private static MediaRecorder mMediaRecorder;
@@ -28,8 +49,16 @@ public class DroidVideoRecorder {
     private static Context appContext;
     private static Uri currentVideoUri;
     private static ParcelFileDescriptor currentVideoFile;
+    private static String currentLegacyVideoPath;
+    private static String currentVideoDisplayName;
+    private static boolean currentShouldMirrorFrontVideo;
     private static int currentCameraId = -1;
     private static boolean mediaRecorderStarted;
+    private static final Handler MIRROR_HANDLER = new Handler(Looper.getMainLooper());
+    private static final ExecutorService MIRROR_COPY_EXECUTOR = Executors.newSingleThreadExecutor();
+    private static final ArrayDeque<PendingMirroredSelfie> PENDING_MIRRORED_SELFIES = new ArrayDeque<>();
+    private static Transformer activeMirrorTransformer;
+    private static PendingMirroredSelfie activeMirroredSelfie;
 
     public static DroidConstants.EnumStateRecVideo StateRecVideo;
     public static DroidConstants.EnumTypeViewCam TypeViewCam;
@@ -127,10 +156,15 @@ public class DroidVideoRecorder {
     private static void SetOutputFile(MediaRecorder mediaRecorder) throws IOException {
         CloseCurrentVideoFile();
         currentVideoUri = null;
+        currentLegacyVideoPath = null;
+        currentVideoDisplayName = NameFileDateNow();
+        currentShouldMirrorFrontVideo = appContext != null
+                && TypeViewCam == DroidConstants.EnumTypeViewCam.FacingFront
+                && DroidPrefsUtils.salvaSelfiesComoVisualizadas(appContext);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && appContext != null) {
             ContentValues values = new ContentValues();
-            values.put(MediaStore.Video.Media.DISPLAY_NAME, NameFileDateNow());
+            values.put(MediaStore.Video.Media.DISPLAY_NAME, currentVideoDisplayName);
             values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
             values.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/Video Recorder");
             values.put(MediaStore.Video.Media.IS_PENDING, 1);
@@ -149,17 +183,26 @@ public class DroidVideoRecorder {
             return;
         }
 
-        mediaRecorder.setOutputFile(NameFileRecDateNow());
+        currentLegacyVideoPath = NameFileRecDateNow();
+        mediaRecorder.setOutputFile(currentLegacyVideoPath);
     }
 
     private static void FinishCurrentVideoFile() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && appContext != null && currentVideoUri != null) {
-            ContentValues values = new ContentValues();
-            values.put(MediaStore.Video.Media.IS_PENDING, 0);
-            appContext.getContentResolver().update(currentVideoUri, values, null, null);
-        }
         CloseCurrentVideoFile();
-        currentVideoUri = null;
+
+        Uri videoUri = currentVideoUri;
+        String legacyVideoPath = currentLegacyVideoPath;
+        String displayName = currentVideoDisplayName;
+        boolean shouldMirrorFrontVideo = currentShouldMirrorFrontVideo;
+
+        PublishMediaStoreVideo(videoUri);
+        if (shouldMirrorFrontVideo) {
+            QueueMirroredSelfie(videoUri, legacyVideoPath, displayName);
+        } else if (legacyVideoPath != null) {
+            ScanLegacyVideo(legacyVideoPath);
+        }
+
+        ClearCurrentVideoState();
     }
 
     private static void DeleteCurrentVideoFile() {
@@ -167,7 +210,25 @@ public class DroidVideoRecorder {
             appContext.getContentResolver().delete(currentVideoUri, null, null);
         }
         CloseCurrentVideoFile();
+        if (currentLegacyVideoPath != null) {
+            new File(currentLegacyVideoPath).delete();
+        }
+        ClearCurrentVideoState();
+    }
+
+    private static void PublishMediaStoreVideo(Uri videoUri) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && appContext != null && videoUri != null) {
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Video.Media.IS_PENDING, 0);
+            appContext.getContentResolver().update(videoUri, values, null, null);
+        }
+    }
+
+    private static void ClearCurrentVideoState() {
         currentVideoUri = null;
+        currentLegacyVideoPath = null;
+        currentVideoDisplayName = null;
+        currentShouldMirrorFrontVideo = false;
     }
 
     private static void CloseCurrentVideoFile() {
@@ -178,6 +239,175 @@ public class DroidVideoRecorder {
                 LogException("StartRecording", ex);
             }
             currentVideoFile = null;
+        }
+    }
+
+    private static void QueueMirroredSelfie(Uri videoUri, String legacyVideoPath, String displayName) {
+        if (appContext == null || (videoUri == null && legacyVideoPath == null)) {
+            return;
+        }
+
+        PendingMirroredSelfie selfie = new PendingMirroredSelfie(videoUri, legacyVideoPath, displayName);
+        MIRROR_HANDLER.post(() -> {
+            PENDING_MIRRORED_SELFIES.offer(selfie);
+            StartNextMirroredSelfie();
+        });
+    }
+
+    private static void StartNextMirroredSelfie() {
+        if (activeMirrorTransformer != null || PENDING_MIRRORED_SELFIES.isEmpty() || appContext == null) {
+            return;
+        }
+
+        activeMirroredSelfie = PENDING_MIRRORED_SELFIES.poll();
+        try {
+            activeMirroredSelfie.transformedFile = File.createTempFile(
+                    "DVR_mirrored_",
+                    ".mp4",
+                    appContext.getCacheDir());
+
+            ScaleAndRotateTransformation mirrorEffect = new ScaleAndRotateTransformation.Builder()
+                    .setScale(-1f, 1f)
+                    .build();
+            Effects effects = new Effects(
+                    Collections.emptyList(),
+                    Collections.singletonList(mirrorEffect));
+            EditedMediaItem editedMediaItem = new EditedMediaItem.Builder(
+                    MediaItem.fromUri(activeMirroredSelfie.GetInputUri()))
+                    .setEffects(effects)
+                    .build();
+
+            activeMirrorTransformer = new Transformer.Builder(appContext)
+                    .addListener(new Transformer.Listener() {
+                        @Override
+                        public void onCompleted(Composition composition, ExportResult result) {
+                            ReplaceActiveMirroredSelfie();
+                        }
+
+                        @Override
+                        public void onError(Composition composition, ExportResult result, ExportException exception) {
+                            LogException("MirrorSelfie", exception);
+                            FinishActiveMirroredSelfie();
+                        }
+                    })
+                    .build();
+            activeMirrorTransformer.start(editedMediaItem, activeMirroredSelfie.transformedFile.getAbsolutePath());
+        } catch (Exception ex) {
+            LogException("MirrorSelfie", ex);
+            FinishActiveMirroredSelfie();
+        }
+    }
+
+    private static void ReplaceActiveMirroredSelfie() {
+        PendingMirroredSelfie selfie = activeMirroredSelfie;
+        if (selfie == null || selfie.transformedFile == null) {
+            FinishActiveMirroredSelfie();
+            return;
+        }
+
+        MIRROR_COPY_EXECUTOR.execute(() -> {
+            try {
+                if (selfie.videoUri != null) {
+                    ReplaceMediaStoreVideo(selfie);
+                } else {
+                    ReplaceLegacyVideo(selfie);
+                }
+            } catch (Exception ex) {
+                LogException("MirrorSelfie", ex);
+            }
+            MIRROR_HANDLER.post(DroidVideoRecorder::FinishActiveMirroredSelfie);
+        });
+    }
+
+    private static void ReplaceMediaStoreVideo(PendingMirroredSelfie selfie) throws IOException {
+        ContentValues values = new ContentValues();
+        values.put(MediaStore.Video.Media.DISPLAY_NAME, selfie.displayName);
+        values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
+        values.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/Video Recorder");
+        values.put(MediaStore.Video.Media.IS_PENDING, 1);
+
+        Uri mirroredVideoUri = appContext.getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values);
+        if (mirroredVideoUri == null) {
+            throw new IOException("Nao foi possivel criar o video selfie espelhado");
+        }
+
+        try {
+            try (InputStream input = new FileInputStream(selfie.transformedFile);
+                 OutputStream output = appContext.getContentResolver().openOutputStream(mirroredVideoUri, "w")) {
+                if (output == null) {
+                    throw new IOException("Nao foi possivel abrir o video selfie espelhado");
+                }
+                Copy(input, output);
+            }
+            PublishMediaStoreVideo(mirroredVideoUri);
+            appContext.getContentResolver().delete(selfie.videoUri, null, null);
+        } catch (Exception ex) {
+            appContext.getContentResolver().delete(mirroredVideoUri, null, null);
+            throw ex;
+        }
+    }
+
+    private static void ReplaceLegacyVideo(PendingMirroredSelfie selfie) throws IOException {
+        File original = new File(selfie.legacyVideoPath);
+        File replacement = new File(selfie.legacyVideoPath + ".mirror.tmp");
+        File backup = new File(selfie.legacyVideoPath + ".original.tmp");
+
+        try (InputStream input = new FileInputStream(selfie.transformedFile);
+             OutputStream output = new FileOutputStream(replacement)) {
+            Copy(input, output);
+        }
+
+        if (!original.renameTo(backup)) {
+            replacement.delete();
+            throw new IOException("Nao foi possivel preparar o video selfie original");
+        }
+        if (!replacement.renameTo(original)) {
+            backup.renameTo(original);
+            replacement.delete();
+            throw new IOException("Nao foi possivel salvar o video selfie espelhado");
+        }
+
+        backup.delete();
+        ScanLegacyVideo(original.getAbsolutePath());
+    }
+
+    private static void Copy(InputStream input, OutputStream output) throws IOException {
+        byte[] buffer = new byte[16 * 1024];
+        int count;
+        while ((count = input.read(buffer)) != -1) {
+            output.write(buffer, 0, count);
+        }
+    }
+
+    private static void ScanLegacyVideo(String path) {
+        if (appContext != null) {
+            MediaScannerConnection.scanFile(appContext, new String[]{path}, new String[]{"video/mp4"}, null);
+        }
+    }
+
+    private static void FinishActiveMirroredSelfie() {
+        if (activeMirroredSelfie != null && activeMirroredSelfie.transformedFile != null) {
+            activeMirroredSelfie.transformedFile.delete();
+        }
+        activeMirrorTransformer = null;
+        activeMirroredSelfie = null;
+        StartNextMirroredSelfie();
+    }
+
+    private static class PendingMirroredSelfie {
+        final Uri videoUri;
+        final String legacyVideoPath;
+        final String displayName;
+        File transformedFile;
+
+        PendingMirroredSelfie(Uri videoUri, String legacyVideoPath, String displayName) {
+            this.videoUri = videoUri;
+            this.legacyVideoPath = legacyVideoPath;
+            this.displayName = displayName;
+        }
+
+        Uri GetInputUri() {
+            return videoUri != null ? videoUri : Uri.fromFile(new File(legacyVideoPath));
         }
     }
 

@@ -131,17 +131,6 @@ public class DroidConfigurationActivity extends Activity {
 
         LinearLayout generalGroup = CreateGroup();
         generalGroup.addView(CreateSwitchRow(
-                "A",
-                COLOR_ICON_BLUE,
-                getString(R.string.txt_titulo),
-                getString(R.string.spf_exibe_iniciar),
-                "spf_exibeAoIniciar",
-                true,
-                true,
-                null));
-        generalGroup.addView(CreateDivider());
-
-        generalGroup.addView(CreateSwitchRow(
                 "T",
                 COLOR_ICON_GREEN,
                 getString(R.string.spf_titulo),
@@ -153,6 +142,17 @@ public class DroidConfigurationActivity extends Activity {
         generalGroup.addView(CreateDivider());
 
         generalGroup.addView(CreateStorageRow());
+        generalGroup.addView(CreateDivider());
+
+        generalGroup.addView(CreateSwitchRow(
+                "F",
+                COLOR_ICON_PURPLE,
+                getString(R.string.spf_salvar_selfies_como_visualizadas),
+                getString(R.string.spf_salvar_selfies_como_visualizadas_resumo),
+                "spf_salvarSelfiesComoVisualizadas",
+                false,
+                true,
+                null));
         content.addView(generalGroup);
 
         LinearLayout commandGroup = CreateGroup();

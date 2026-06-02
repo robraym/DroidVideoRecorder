@@ -60,6 +60,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     private WindowManager windowManager;
     private ImageView chatHead;
     private TrashTargetView trashTarget;
+    private SettingsTargetView settingsTarget;
     private TextView txtHead;
     private TextView txtCameraBadge;
     private SurfaceView mSurfaceView;
@@ -78,6 +79,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     private boolean pendingReadyPreview;
     private boolean trashDragActive;
     private boolean trashTargetHighlighted;
+    private boolean settingsTargetHighlighted;
     private boolean closingFromTrash;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private PalmGestureDetector palmGestureDetector;
@@ -124,6 +126,13 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             PixelFormat.TRANSLUCENT);
 
     WindowManager.LayoutParams trashTargetParams = new WindowManager.LayoutParams(
+            1,
+            1,
+            getOverlayWindowType(),
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            PixelFormat.TRANSLUCENT);
+
+    WindowManager.LayoutParams settingsTargetParams = new WindowManager.LayoutParams(
             1,
             1,
             getOverlayWindowType(),
@@ -226,6 +235,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         if (mSurfaceView != null) windowManager.removeView(mSurfaceView);
         if (readyPreviewView != null) windowManager.removeView(readyPreviewView);
         if (trashTarget != null) windowManager.removeView(trashTarget);
+        if (settingsTarget != null) windowManager.removeView(settingsTarget);
         if (palmGestureDetector != null) palmGestureDetector.Close();
         if (sensorManager != null) sensorManager.unregisterListener(this);
         Vibrar(100);
@@ -441,8 +451,11 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         txtCameraBadge.setVisibility(View.INVISIBLE);
         trashTarget = new TrashTargetView(context);
         trashTarget.setVisibility(View.INVISIBLE);
+        settingsTarget = new SettingsTargetView(context);
+        settingsTarget.setVisibility(View.INVISIBLE);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             trashTarget.setElevation(dp(12));
+            settingsTarget.setElevation(dp(12));
         }
 
         params.gravity = Gravity.CENTER;
@@ -452,12 +465,17 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         trashTargetParams.height = dp(TRASH_TARGET_HEIGHT_DP);
         trashTargetParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
         trashTargetParams.y = dp(18);
+        settingsTargetParams.width = dp(TRASH_TARGET_WIDTH_DP);
+        settingsTargetParams.height = dp(TRASH_TARGET_HEIGHT_DP);
+        settingsTargetParams.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+        settingsTargetParams.y = dp(18);
         windowManager.addView(mSurfaceView, surfaceParams);
         windowManager.addView(readyPreviewView, readyPreviewParams);
         windowManager.addView(chatHead, params);
         windowManager.addView(txtHead, params);
         windowManager.addView(txtCameraBadge, params);
         windowManager.addView(trashTarget, trashTargetParams);
+        windowManager.addView(settingsTarget, settingsTargetParams);
         tts = new TextToSpeech(context, this);
 
         DroidVideoRecorder.SetContext(context);
@@ -970,6 +988,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
                 .setDuration(210)
                 .setInterpolator(new OvershootInterpolator(1.6f))
                 .start();
+        ShowSettingsTarget();
     }
 
     private void HideTrashTarget() {
@@ -990,6 +1009,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
                     }
                 })
                 .start();
+        HideSettingsTarget();
     }
 
     private void UpdateTrashTarget(boolean highlighted) {
@@ -1010,7 +1030,67 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             AnimateBubbleCapturedByTrash();
             ShowChatHeadIcon(R.mipmap.closerec);
             chatHead.setBackground(CreatePreviewBorder(Color.rgb(232, 65, 72)));
-        } else {
+        } else if (!settingsTargetHighlighted) {
+            RestoreBubbleDragAppearance();
+            RestoreBubbleAppearance();
+        }
+    }
+
+    private void ShowSettingsTarget() {
+        settingsTarget.animate().cancel();
+        settingsTarget.ResetAnimationState();
+        UpdateSettingsTarget(false);
+        settingsTarget.setVisibility(View.VISIBLE);
+        settingsTarget.setAlpha(0f);
+        settingsTarget.setScaleX(0.72f);
+        settingsTarget.setScaleY(0.72f);
+        settingsTarget.animate()
+                .alpha(1f)
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(210)
+                .setInterpolator(new OvershootInterpolator(1.6f))
+                .start();
+    }
+
+    private void HideSettingsTarget() {
+        UpdateSettingsTarget(false);
+        settingsTarget.animate().cancel();
+        settingsTarget.animate()
+                .alpha(0f)
+                .scaleX(0.82f)
+                .scaleY(0.82f)
+                .setDuration(130)
+                .setInterpolator(new AccelerateInterpolator())
+                .withEndAction(new Runnable() {
+                    @Override
+                    public void run() {
+                        settingsTarget.setVisibility(View.INVISIBLE);
+                        settingsTarget.ResetAnimationState();
+                    }
+                })
+                .start();
+    }
+
+    private void UpdateSettingsTarget(boolean highlighted) {
+        if (closingFromTrash) {
+            return;
+        }
+        settingsTargetHighlighted = highlighted;
+        settingsTarget.SetHighlighted(highlighted);
+        settingsTarget.animate().cancel();
+        settingsTarget.animate()
+                .scaleX(highlighted ? 1.08f : 1f)
+                .scaleY(highlighted ? 1.08f : 1f)
+                .rotation(0f)
+                .setDuration(highlighted ? 170 : 140)
+                .setInterpolator(highlighted ? new OvershootInterpolator(1.4f) : new DecelerateInterpolator())
+                .start();
+        if (highlighted) {
+            AnimateBubbleCapturedByTrash();
+            ShowChatHeadIcon(android.R.drawable.ic_menu_preferences);
+            chatHead.setBackground(CreatePreviewBorder(Color.rgb(90, 160, 235)));
+        } else if (!trashTargetHighlighted) {
             RestoreBubbleDragAppearance();
             RestoreBubbleAppearance();
         }
@@ -1098,12 +1178,34 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
                 + (distanceY * distanceY) / (radiusY * radiusY) <= 1f;
     }
 
+    private boolean IsPointerOverSettingsTarget(MotionEvent event) {
+        int[] location = new int[2];
+        settingsTarget.getLocationOnScreen(location);
+        float centerX = location[0] + settingsTarget.getWidth() / 2f;
+        float centerY = location[1] + settingsTarget.getHeight() / 2f;
+        float distanceX = event.getRawX() - centerX;
+        float distanceY = event.getRawY() - centerY;
+        float radiusX = settingsTarget.getWidth() / 2f + dp(24);
+        float radiusY = settingsTarget.getHeight() / 2f + dp(28);
+        return (distanceX * distanceX) / (radiusX * radiusX)
+                + (distanceY * distanceY) / (radiusY * radiusY) <= 1f;
+    }
+
+    private void OpenSettingsFromTarget() {
+        HideTrashTarget();
+        RestoreBubbleDragAppearance();
+        RestoreBubbleAppearance();
+        Vibrar(50);
+        AbrirConfig();
+    }
+
     private void CloseFromTrashTarget() {
         if (closingFromTrash) {
             return;
         }
         closingFromTrash = true;
         trashDragActive = false;
+        HideSettingsTarget();
         if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.RECORD) {
             Fala(getString(R.string.parandoGravacao));
             ShowStopRecord(true);
@@ -1392,6 +1494,152 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             super.onProgressUpdate(values);
             DecimalFormat df = new DecimalFormat("00");
             txtHead.setText(df.format(values[1]) + ":" + df.format(values[0]));
+        }
+    }
+
+    private class SettingsTargetView extends View {
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final RectF rect = new RectF();
+        private final Path path = new Path();
+        private boolean highlighted;
+        private float highlightPulse;
+        private ValueAnimator pulseAnimator;
+
+        public SettingsTargetView(Context context) {
+            super(context);
+            setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+            setWillNotDraw(false);
+        }
+
+        public void SetHighlighted(boolean highlighted) {
+            if (this.highlighted == highlighted) {
+                invalidate();
+                return;
+            }
+            this.highlighted = highlighted;
+            if (highlighted) {
+                StartPulse();
+            } else {
+                StopPulse();
+            }
+            invalidate();
+        }
+
+        public void ResetAnimationState() {
+            setAlpha(1f);
+            setScaleX(1f);
+            setScaleY(1f);
+            setRotation(0f);
+            StopPulse();
+            SetHighlighted(false);
+        }
+
+        private void StartPulse() {
+            StopPulse();
+            pulseAnimator = ValueAnimator.ofFloat(0f, 1f);
+            pulseAnimator.setDuration(920);
+            pulseAnimator.setRepeatCount(ValueAnimator.INFINITE);
+            pulseAnimator.setInterpolator(new LinearInterpolator());
+            pulseAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+                @Override
+                public void onAnimationUpdate(ValueAnimator animation) {
+                    highlightPulse = (Float) animation.getAnimatedValue();
+                    invalidate();
+                }
+            });
+            pulseAnimator.start();
+        }
+
+        private void StopPulse() {
+            if (pulseAnimator != null) {
+                pulseAnimator.cancel();
+                pulseAnimator = null;
+            }
+            highlightPulse = 0f;
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            float width = getWidth();
+            float height = getHeight();
+            float centerX = width / 2f;
+            float centerY = height / 2f;
+
+            DrawTargetCard(canvas, width, height);
+            DrawGearIcon(canvas, centerX, centerY);
+        }
+
+        private void DrawTargetCard(Canvas canvas, float width, float height) {
+            paint.reset();
+            paint.setAntiAlias(true);
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(Color.argb(highlighted ? 220 : 190, 30, 33, 39));
+            paint.setShadowLayer(dp(highlighted ? 18 : 11), 0, dp(6),
+                    Color.argb(highlighted ? 145 : 100, 0, 0, 0));
+            rect.set(dp(9), dp(9), width - dp(9), height - dp(9));
+            canvas.drawRoundRect(rect, dp(28), dp(28), paint);
+
+            paint.clearShadowLayer();
+            paint.setShader(new LinearGradient(
+                    0f,
+                    rect.top,
+                    0f,
+                    rect.bottom,
+                    new int[]{
+                            Color.argb(70, 255, 255, 255),
+                            Color.argb(12, 255, 255, 255),
+                            Color.argb(48, 0, 0, 0)
+                    },
+                    new float[]{0f, 0.42f, 1f},
+                    Shader.TileMode.CLAMP));
+            canvas.drawRoundRect(rect, dp(28), dp(28), paint);
+            paint.setShader(null);
+
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(dp(highlighted ? 2 : 1));
+            paint.setColor(highlighted
+                    ? Color.argb(180, 115, 180, 255)
+                    : Color.argb(95, 245, 248, 252));
+            canvas.drawRoundRect(rect, dp(26), dp(26), paint);
+        }
+
+        private void DrawGearIcon(Canvas canvas, float centerX, float centerY) {
+            float rotation = highlighted ? highlightPulse * 28f : 0f;
+            float outerRadius = dp(29);
+            float innerRadius = dp(22);
+
+            canvas.save();
+            canvas.rotate(rotation, centerX, centerY);
+            path.reset();
+            for (int i = 0; i < 24; i++) {
+                double angle = -Math.PI / 2d + i * Math.PI * 2d / 24d;
+                float radius = i % 3 == 1 ? innerRadius : outerRadius;
+                float x = centerX + (float) Math.cos(angle) * radius;
+                float y = centerY + (float) Math.sin(angle) * radius;
+                if (i == 0) {
+                    path.moveTo(x, y);
+                } else {
+                    path.lineTo(x, y);
+                }
+            }
+            path.close();
+
+            paint.reset();
+            paint.setAntiAlias(true);
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(highlighted
+                    ? Color.rgb(132, 188, 255)
+                    : Color.rgb(224, 231, 239));
+            canvas.drawPath(path, paint);
+
+            paint.setColor(Color.rgb(45, 50, 58));
+            canvas.drawCircle(centerX, centerY, dp(10), paint);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(dp(2));
+            paint.setColor(Color.argb(150, 255, 255, 255));
+            canvas.drawCircle(centerX, centerY, dp(11), paint);
+            canvas.restore();
         }
     }
 
@@ -1720,16 +1968,26 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
                         windowManager.updateViewLayout(readyPreviewView, readyPreviewParams);
                     }
                     if (trashDragActive) {
+                        boolean pointerOverSettingsTarget = IsPointerOverSettingsTarget(event);
                         boolean pointerOverTrashTarget = IsPointerOverTrashTarget(event);
+                        if (pointerOverSettingsTarget) {
+                            pointerOverTrashTarget = false;
+                        }
                         if (pointerOverTrashTarget != trashTargetHighlighted) {
                             UpdateTrashTarget(pointerOverTrashTarget);
+                        }
+                        if (pointerOverSettingsTarget != settingsTargetHighlighted) {
+                            UpdateSettingsTarget(pointerOverSettingsTarget);
                         }
                     }
                     return true;
                 case MotionEvent.ACTION_UP:
                     if (trashDragActive) {
+                        boolean openSettings = settingsTargetHighlighted;
                         boolean closeApp = trashTargetHighlighted;
-                        if (closeApp) {
+                        if (openSettings) {
+                            OpenSettingsFromTarget();
+                        } else if (closeApp) {
                             CloseFromTrashTarget();
                         } else {
                             HideTrashTarget();

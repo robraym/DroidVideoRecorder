@@ -6,6 +6,8 @@
     <string name="spf_exibe_iniciar">Show this screen when opening the app</string>
     <string name="spf_exibe_tempo_gravacao">Show the timer while recording</string>
     <string name="spf_titulo">Recording timer</string>
+    <string name="spf_salvar_selfies_como_visualizadas">Save selfies as previewed</string>
+    <string name="spf_salvar_selfies_como_visualizadas_resumo">Save selfies and selfie videos as they appear in the preview without flipping them.</string>
     <string name="txt_gravacao_videos">Save videos to</string>
     <string name="txt_local_gravacao_videos">Internal</string>
     <string name="parando">Stopping</string>

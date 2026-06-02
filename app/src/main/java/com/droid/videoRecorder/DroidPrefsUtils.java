@@ -123,6 +123,17 @@ public class DroidPrefsUtils {
 
     }
 
+    public static boolean salvaSelfiesComoVisualizadas(final Context context) {
+        boolean spf = false;
+        try {
+            SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
+            spf = sp.getBoolean("spf_salvarSelfiesComoVisualizadas", false);
+        } catch (Exception ex) {
+            Log.d("DroidVideo", ex.getMessage());
+        }
+        return spf;
+    }
+
     public static int obtemLocalGravacao(final Context context) {
         int local = 0; // Interno
         try {
