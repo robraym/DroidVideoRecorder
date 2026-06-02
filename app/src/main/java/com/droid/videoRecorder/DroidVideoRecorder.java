@@ -3,6 +3,7 @@ package com.droid.videoRecorder;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.res.Configuration;
+import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
 import android.media.CamcorderProfile;
 import android.media.MediaRecorder;
@@ -11,6 +12,7 @@ import android.os.Build;
 import android.os.Environment;
 import android.os.ParcelFileDescriptor;
 import android.provider.MediaStore;
+import android.view.Surface;
 import android.view.SurfaceHolder;
 import java.io.File;
 import java.io.IOException;
@@ -22,6 +24,7 @@ import android.util.Log;
 public class DroidVideoRecorder {
     private static Camera mServiceCamera;
     private static MediaRecorder mMediaRecorder;
+    private static Surface mRecordingPreviewSurface;
     private static Context appContext;
     private static Uri currentVideoUri;
     private static ParcelFileDescriptor currentVideoFile;
@@ -340,8 +343,32 @@ public class DroidVideoRecorder {
 
     }
 
+    public static void OnViewRec(SurfaceTexture surfaceTexture)
+    {
+        try {
+            mServiceCamera.setPreviewTexture(surfaceTexture);
+            mServiceCamera.startPreview();
+            mServiceCamera.cancelAutoFocus();
+        }
+        catch (Exception ex)
+        {
+            LogException("ViewRec", ex);
+        }
+    }
+
 
     public static boolean OnStartRecording(SurfaceHolder surfaceHolder, int orientation)
+    {
+        return OnStartRecording(surfaceHolder.getSurface(), orientation);
+    }
+
+    public static boolean OnStartRecording(SurfaceTexture surfaceTexture, int orientation)
+    {
+        mRecordingPreviewSurface = new Surface(surfaceTexture);
+        return OnStartRecording(mRecordingPreviewSurface, orientation);
+    }
+
+    private static boolean OnStartRecording(Surface previewSurface, int orientation)
     {
         try {
             mediaRecorderStarted = false;
@@ -356,7 +383,7 @@ public class DroidVideoRecorder {
 
             mMediaRecorder.setProfile(GetBestCamcorderProfile());
 
-            mMediaRecorder.setPreviewDisplay(surfaceHolder.getSurface());
+            mMediaRecorder.setPreviewDisplay(previewSurface);
             mMediaRecorder.setOrientationHint(GetDisplayOrientationRec(orientation));
 
             mMediaRecorder.prepare();
@@ -396,6 +423,11 @@ public class DroidVideoRecorder {
             }
             mMediaRecorder = null;
             mediaRecorderStarted = false;
+        }
+
+        if (mRecordingPreviewSurface != null) {
+            mRecordingPreviewSurface.release();
+            mRecordingPreviewSurface = null;
         }
 
         if (mServiceCamera != null) {
