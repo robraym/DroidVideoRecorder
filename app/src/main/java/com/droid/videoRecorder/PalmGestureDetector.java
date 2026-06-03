@@ -2,6 +2,7 @@ package com.droid.videoRecorder;
 
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
@@ -27,6 +28,7 @@ class PalmGestureDetector {
     private static final long ANALYSIS_INTERVAL_MS = 300;
     private static final float MIN_OPEN_PALM_SCORE = 0.45f;
     private static final int REQUIRED_CONSECUTIVE_DETECTIONS = 2;
+    private static final int MIN_SUPPORTED_SDK = Build.VERSION_CODES.P;
 
     private final Context context;
     private final TextureView previewView;
@@ -36,6 +38,8 @@ class PalmGestureDetector {
     private GestureRecognizer gestureRecognizer;
     private boolean active;
     private volatile boolean analyzing;
+    private volatile boolean runtimeSupported = true;
+    private boolean unsupportedSdkLogged;
     private int consecutiveDetections;
     private String lastLoggedGesture = "";
 
@@ -65,6 +69,10 @@ class PalmGestureDetector {
     };
 
     void Start() {
+        if (!IsSupported()) {
+            LogUnsupportedSdkOnce();
+            return;
+        }
         if (active) {
             return;
         }
@@ -98,8 +106,10 @@ class PalmGestureDetector {
             GestureRecognizerResult result = gestureRecognizer.recognize(image);
             boolean openPalmDetected = ContainsOpenPalm(result.gestures());
             mainHandler.post(() -> HandleResult(openPalmDetected));
-        } catch (Exception ex) {
+        } catch (Throwable ex) {
+            runtimeSupported = false;
             Log.e("DVR", "Falha ao reconhecer gesto de palma", ex);
+            Pause();
         } finally {
             if (image != null) {
                 image.close();
@@ -125,6 +135,18 @@ class PalmGestureDetector {
                         .build();
         gestureRecognizer = GestureRecognizer.createFromOptions(context, options);
         Log.d("DVR-PALM", "Detector de palma inicializado");
+    }
+
+    private boolean IsSupported() {
+        return runtimeSupported && Build.VERSION.SDK_INT >= MIN_SUPPORTED_SDK;
+    }
+
+    private void LogUnsupportedSdkOnce() {
+        if (unsupportedSdkLogged) {
+            return;
+        }
+        unsupportedSdkLogged = true;
+        Log.d("DVR-PALM", "Gesto de palma desativado neste Android por compatibilidade");
     }
 
     private boolean ContainsOpenPalm(List<List<Category>> gestures) {
