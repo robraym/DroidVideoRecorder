@@ -52,6 +52,8 @@ public class DroidVideoRecorder {
     private static String currentLegacyVideoPath;
     private static String currentVideoDisplayName;
     private static boolean currentShouldMirrorFrontVideo;
+    private static int currentPreviewWidth;
+    private static int currentPreviewHeight;
     private static int currentCameraId = -1;
     private static boolean mediaRecorderStarted;
     private static final Handler MIRROR_HANDLER = new Handler(Looper.getMainLooper());
@@ -509,6 +511,35 @@ public class DroidVideoRecorder {
         }
     }
 
+    private static Camera.Size GetBestPreviewSize(List<Camera.Size> previewSizes) {
+        if (previewSizes == null || previewSizes.isEmpty()) {
+            return null;
+        }
+
+        Camera.Size bestSize = previewSizes.get(0);
+        double bestScore = Double.MAX_VALUE;
+        for (Camera.Size size : previewSizes) {
+            double aspectRatio = Math.max(size.width, size.height) / (double) Math.min(size.width, size.height);
+            double aspectDistance = Math.abs(aspectRatio - (16d / 9d));
+            double sizeDistance = Math.abs(Math.max(size.width, size.height) - 1280)
+                    + Math.abs(Math.min(size.width, size.height) - 720);
+            double score = aspectDistance * 10000d + sizeDistance;
+            if (score < bestScore) {
+                bestScore = score;
+                bestSize = size;
+            }
+        }
+        return bestSize;
+    }
+
+    public static float GetPreviewAspectRatio() {
+        if (currentPreviewWidth <= 0 || currentPreviewHeight <= 0) {
+            return 16f / 9f;
+        }
+        return Math.max(currentPreviewWidth, currentPreviewHeight)
+                / (float) Math.min(currentPreviewWidth, currentPreviewHeight);
+    }
+
     public static void OnInitRec (Configuration orient, int orientation, DroidConstants.EnumTypeViewCam typeViewCam)
     {
         try {
@@ -531,15 +562,17 @@ public class DroidVideoRecorder {
                 Camera.Parameters p = mServiceCamera.getParameters();
 
                 final List<Camera.Size> listSize = p.getSupportedPreviewSizes();
-                Camera.Size mPreviewSize = listSize.get(0);
-
-                int previewWidth = mPreviewSize.width;
-                int previewHeight = mPreviewSize.height;
+                Camera.Size mPreviewSize = GetBestPreviewSize(listSize);
 
                 mServiceCamera.setDisplayOrientation(GetDisplayOrientationView(orient, orientation));
 
                 ConfigureFocus(p);
-                p.setPreviewSize(previewWidth, previewHeight);
+                if (mPreviewSize != null) {
+                    p.setPreviewSize(mPreviewSize.width, mPreviewSize.height);
+                    currentPreviewWidth = mPreviewSize.width;
+                    currentPreviewHeight = mPreviewSize.height;
+                    Log.d("DVR", "Tamanho da previa: " + mPreviewSize.width + "x" + mPreviewSize.height);
+                }
                 mServiceCamera.setParameters(p);
             }
 

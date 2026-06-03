@@ -14,6 +14,7 @@ import android.animation.ValueAnimator;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
+import android.graphics.Matrix;
 import android.graphics.Outline;
 import android.graphics.Paint;
 import android.graphics.Path;
@@ -395,11 +396,13 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         readyPreviewView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
             @Override
             public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
+                ApplyPreviewTransform();
                 StartPendingReadyPreview();
             }
 
             @Override
             public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {
+                ApplyPreviewTransform();
                 StartPendingReadyPreview();
             }
 
@@ -696,6 +699,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         ShowRecordingPreview();
         SetPreviewFullScreen(false);
         DroidVideoRecorder.OnInitRec(getResources().getConfiguration(), orientationEvent, DroidVideoRecorder.TypeViewCam);
+        ApplyPreviewTransform();
         boolean recordingStarted;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
                 && readyPreviewView != null
@@ -814,9 +818,28 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             readyPreviewView.setAlpha(1f);
             readyPreviewView.setVisibility(View.VISIBLE);
             windowManager.updateViewLayout(readyPreviewView, readyPreviewParams);
+            ApplyPreviewTransform();
         } catch (Exception ex) {
             Log.d("DVR", ex.getMessage());
         }
+    }
+
+    private void ApplyPreviewTransform() {
+        if (readyPreviewView == null
+                || readyPreviewView.getWidth() == 0
+                || readyPreviewView.getHeight() == 0) {
+            return;
+        }
+
+        float viewWidth = readyPreviewView.getWidth();
+        float viewHeight = readyPreviewView.getHeight();
+        float aspectRatio = DroidVideoRecorder.GetPreviewAspectRatio();
+        boolean landscape = getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
+        Matrix matrix = new Matrix();
+        matrix.setScale(landscape ? aspectRatio : 1f, landscape ? 1f : aspectRatio,
+                viewWidth / 2f,
+                viewHeight / 2f);
+        readyPreviewView.setTransform(matrix);
     }
 
     private GradientDrawable CreatePreviewBorder(int color) {
@@ -846,6 +869,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             windowManager.updateViewLayout(chatHead, params);
             windowManager.updateViewLayout(txtHead, params);
             windowManager.updateViewLayout(txtCameraBadge, params);
+            ApplyPreviewTransform();
         } catch (Exception ex) {
             Log.d("DVR", ex.getMessage());
         }
@@ -1328,6 +1352,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
 
         pendingReadyPreview = false;
         DroidVideoRecorder.OnInitRec(getResources().getConfiguration(), orientationEvent, pendingPreviewCam);
+        ApplyPreviewTransform();
         DroidVideoRecorder.OnViewRec(readyPreviewView.getSurfaceTexture());
     }
 
