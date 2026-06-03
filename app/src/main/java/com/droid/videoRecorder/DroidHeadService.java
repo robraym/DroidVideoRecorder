@@ -53,6 +53,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     private static final int CHAT_HEAD_DEFAULT_SIZE_DP = 122;
     private static final int CHAT_HEAD_MIN_SIZE_DP = 84;
     private static final int CHAT_HEAD_MAX_SIZE_DP = 220;
+    private static final int CHAT_HEAD_MIN_TOUCH_SIZE_DP = 148;
     private static final int TRASH_TARGET_WIDTH_DP = 104;
     private static final int TRASH_TARGET_HEIGHT_DP = 108;
     private static final float TWIST_THRESHOLD = 5.5f;
@@ -62,6 +63,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
 
     private WindowManager windowManager;
     private ImageView chatHead;
+    private View touchTarget;
     private TrashTargetView trashTarget;
     private SettingsTargetView settingsTarget;
     private TextView txtHead;
@@ -127,6 +129,13 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT);
 
+    WindowManager.LayoutParams touchParams = new WindowManager.LayoutParams(
+            1,
+            1,
+            getOverlayWindowType(),
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            PixelFormat.TRANSLUCENT);
+
     WindowManager.LayoutParams trashTargetParams = new WindowManager.LayoutParams(
             1,
             1,
@@ -158,6 +167,10 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
 
     private float BubbleTextSize(float baseValue) {
         return Math.max(1f, baseValue * chatHeadSizeDp / CHAT_HEAD_DEFAULT_SIZE_DP);
+    }
+
+    private int GetTouchTargetSizeDp() {
+        return Math.max(chatHeadSizeDp, CHAT_HEAD_MIN_TOUCH_SIZE_DP);
     }
 
     private void TimeSleep(Integer seg) {
@@ -212,6 +225,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         serviceActive = false;
         super.onDestroy();
         DroidVideoRecorder.OnStopRecording(false);
+        if (touchTarget != null) windowManager.removeView(touchTarget);
         if (chatHead != null) windowManager.removeView(chatHead);
         if (txtHead != null) windowManager.removeView(txtHead);
         if (txtCameraBadge != null) windowManager.removeView(txtCameraBadge);
@@ -424,6 +438,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         chatHead.setImageResource(R.mipmap.viewrec);
         params.width = dp(chatHeadSizeDp);
         params.height = dp(chatHeadSizeDp);
+        touchTarget = new View(context);
         txtHead = new TextView(context);
         txtHead.setText("00:00");
         txtHead.setTextColor(Color.WHITE);
@@ -449,6 +464,9 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         }
 
         params.gravity = Gravity.CENTER;
+        touchParams.gravity = Gravity.CENTER;
+        touchParams.width = dp(GetTouchTargetSizeDp());
+        touchParams.height = dp(GetTouchTargetSizeDp());
         surfaceParams.gravity = Gravity.CENTER;
         readyPreviewParams.gravity = Gravity.CENTER;
         trashTargetParams.width = dp(TRASH_TARGET_WIDTH_DP);
@@ -464,6 +482,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         windowManager.addView(chatHead, params);
         windowManager.addView(txtHead, params);
         windowManager.addView(txtCameraBadge, params);
+        windowManager.addView(touchTarget, touchParams);
         windowManager.addView(trashTarget, trashTargetParams);
         windowManager.addView(settingsTarget, settingsTargetParams);
         tts = new TextToSpeech(context, this);
@@ -502,6 +521,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     }
 
     private void InicializarAcao() {
+        touchTarget.setOnTouchListener(onTouchListener);
         txtHead.setOnTouchListener(onTouchListener);
         txtCameraBadge.setOnTouchListener(onTouchListener);
         chatHead.setOnTouchListener(onTouchListener);
@@ -858,6 +878,10 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         chatHeadSizeDp = Math.max(CHAT_HEAD_MIN_SIZE_DP, Math.min(CHAT_HEAD_MAX_SIZE_DP, newSizeDp));
         params.width = dp(chatHeadSizeDp);
         params.height = dp(chatHeadSizeDp);
+        touchParams.width = dp(GetTouchTargetSizeDp());
+        touchParams.height = dp(GetTouchTargetSizeDp());
+        touchParams.x = params.x;
+        touchParams.y = params.y;
         readyPreviewParams.width = dp(chatHeadSizeDp);
         readyPreviewParams.height = dp(chatHeadSizeDp);
         txtCameraBadge.setPadding(0, 0, 0, dp(BubbleDp(5)));
@@ -869,6 +893,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             windowManager.updateViewLayout(chatHead, params);
             windowManager.updateViewLayout(txtHead, params);
             windowManager.updateViewLayout(txtCameraBadge, params);
+            windowManager.updateViewLayout(touchTarget, touchParams);
             ApplyPreviewTransform();
         } catch (Exception ex) {
             Log.d("DVR", ex.getMessage());
@@ -1861,6 +1886,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         private final int touchSlop = ViewConfiguration.get(DroidHeadService.this).getScaledTouchSlop();
         private boolean dragStarted;
         private boolean multiTouchGesture;
+        private boolean singleFingerGestureAccepted;
 
         private GestureDetector gestureDetector = new GestureDetector(DroidHeadService.this, new GestureDetector.SimpleOnGestureListener() {
 
@@ -1941,7 +1967,17 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             if (multiTouchGesture) {
                 if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
                     multiTouchGesture = false;
+                    singleFingerGestureAccepted = false;
                 }
+                return true;
+            }
+
+            if (action == MotionEvent.ACTION_DOWN) {
+                singleFingerGestureAccepted = IsPointerNearVisibleBubble(event);
+                if (!singleFingerGestureAccepted) {
+                    return true;
+                }
+            } else if (!singleFingerGestureAccepted) {
                 return true;
             }
 
@@ -1962,6 +1998,8 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
                     params.x = initialX + totalMoveX;
                     Integer totalMoveY = (int) (event.getRawY() - initialTouchY);
                     params.y = initialY + totalMoveY;
+                    touchParams.x = params.x;
+                    touchParams.y = params.y;
                     if (!dragStarted && IsDragGesture(totalMoveX, totalMoveY)) {
                         dragStarted = true;
                         ShowTrashTarget();
@@ -1969,6 +2007,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
                     windowManager.updateViewLayout(chatHead, params);
                     windowManager.updateViewLayout(txtHead, params);
                     windowManager.updateViewLayout(txtCameraBadge, params);
+                    windowManager.updateViewLayout(touchTarget, touchParams);
                     if ((DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.STOP
                             || DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.RECORD)
                             && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -2002,11 +2041,13 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
                             HideTrashTarget();
                         }
                     }
+                    singleFingerGestureAccepted = false;
                     return true;
                 case MotionEvent.ACTION_CANCEL:
                     if (trashDragActive && !closingFromTrash) {
                         HideTrashTarget();
                     }
+                    singleFingerGestureAccepted = false;
                     return true;
             }
 
@@ -2015,6 +2056,17 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
 
         private boolean IsDragGesture(int totalMoveX, int totalMoveY) {
             return totalMoveX * totalMoveX + totalMoveY * totalMoveY >= touchSlop * touchSlop;
+        }
+
+        private boolean IsPointerNearVisibleBubble(MotionEvent event) {
+            int[] location = new int[2];
+            chatHead.getLocationOnScreen(location);
+            float centerX = location[0] + chatHead.getWidth() / 2f;
+            float centerY = location[1] + chatHead.getHeight() / 2f;
+            float radius = chatHead.getWidth() / 2f + dp(16);
+            float distanceX = event.getRawX() - centerX;
+            float distanceY = event.getRawY() - centerY;
+            return distanceX * distanceX + distanceY * distanceY <= radius * radius;
         }
 
         private void CancelSingleFingerGesture(MotionEvent event) {
