@@ -15,6 +15,9 @@ import java.io.File;
  */
 
 public class DroidPrefsUtils {
+    public static final int LOCAL_GRAVACAO_RECORDER = 0;
+    public static final int LOCAL_GRAVACAO_CARTAO_SD = 1;
+    public static final int LOCAL_GRAVACAO_CAMERA = 2;
     private static final String PREF_ULTIMA_CAMERA = "spf_ultimaCamera";
     private static final String PREF_TAMANHO_BOLINHA = "spf_tamanhoBolinha";
     private static final String CAMERA_FRONTAL = "front";
@@ -111,13 +114,17 @@ public class DroidPrefsUtils {
     }
 
     public static int obtemLocalGravacao(final Context context) {
-        int local = 0; // Interno
+        int local = LOCAL_GRAVACAO_CAMERA;
         try {
             SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
-            local = Integer.parseInt(sp.getString("ltp_localGravacaoVideo", "0"));
-            if (local == 1 && !temCartaoSd(context)) {
-                local = 0;
-                sp.edit().putString("ltp_localGravacaoVideo", "0").apply();
+            local = Integer.parseInt(sp.getString("ltp_localGravacaoVideo", String.valueOf(LOCAL_GRAVACAO_CAMERA)));
+            if (local == LOCAL_GRAVACAO_RECORDER) {
+                local = LOCAL_GRAVACAO_CAMERA;
+                sp.edit().putString("ltp_localGravacaoVideo", String.valueOf(LOCAL_GRAVACAO_CAMERA)).apply();
+            }
+            if (local == LOCAL_GRAVACAO_CARTAO_SD && !temCartaoSd(context)) {
+                local = LOCAL_GRAVACAO_CAMERA;
+                sp.edit().putString("ltp_localGravacaoVideo", String.valueOf(LOCAL_GRAVACAO_CAMERA)).apply();
             }
         } catch (Exception ex) {
             Log.d("DroidVideo", ex.getMessage());
@@ -148,6 +155,25 @@ public class DroidPrefsUtils {
             Log.d("DroidVideo", ex.getMessage());
         }
         return false;
+    }
+
+    public static File obtemDiretorioCartaoSd(final Context context) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+                File[] directories = context.getExternalFilesDirs(Environment.DIRECTORY_MOVIES);
+                if (directories != null) {
+                    for (int i = 1; i < directories.length; i++) {
+                        File directory = directories[i];
+                        if (directory != null && Environment.MEDIA_MOUNTED.equals(Environment.getExternalStorageState(directory))) {
+                            return directory;
+                        }
+                    }
+                }
+            }
+        } catch (Exception ex) {
+            Log.d("DroidVideo", ex.getMessage());
+        }
+        return null;
     }
 
     public static DroidConstants.EnumTypeViewCam obtemUltimaCamera(final Context context) {

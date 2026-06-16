@@ -28,7 +28,7 @@
             android:title="@string/spf_revisar_video_apos_gravar"></SwitchPreference>
 
         <ListPreference
-            android:defaultValue="0"
+            android:defaultValue="2"
             android:entries="@array/localArquivosGravados"
             android:entryValues="@array/valor_localArquivosGravados"
             android:key="ltp_localGravacaoVideo"

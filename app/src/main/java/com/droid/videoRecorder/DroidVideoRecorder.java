@@ -37,6 +37,7 @@ import java.util.ArrayDeque;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import android.util.Log;
@@ -109,31 +110,63 @@ public class DroidVideoRecorder {
         return (Environment.MEDIA_MOUNTED.equals(Environment.getExternalStorageState()));
     }
 
-    public static String GetPathStorage() {
-        String strSDCardPath = "";
-        String strDirectory = "";
+    private static String GetMediaStoreRelativePath() {
+        if (LocalGravacaoVideo == DroidPrefsUtils.LOCAL_GRAVACAO_CAMERA) {
+            return Environment.DIRECTORY_DCIM + "/Camera";
+        }
+        return Environment.DIRECTORY_MOVIES + "/Recorder";
+    }
 
-        try {
-
-            if (LocalGravacaoVideo == 1) { // Cartao SD
-                if (isExternalStorageMediaMounted()) {
-                    strSDCardPath = System.getenv("SECONDARY_STORAGE");
-                    if ((null == strSDCardPath) || (strSDCardPath.length() == 0)) {
-                        strSDCardPath = System.getenv("EXTERNAL_SDCARD_STORAGE");
-                    }
-                    strDirectory = CreateGetDirectory(strSDCardPath + DroidConstants.PASTADOSARQUIVOSGRAVADOS);
-                }
-            }
-        } catch (Exception e) {
-        } finally {
-            if (strSDCardPath == "" || strDirectory == "") {
-                if (strDirectory == "") {
-                    File directory = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "Recorder");
-                    strDirectory = CreateGetDirectory(directory.getAbsolutePath());
+    private static Uri GetMediaStoreCollectionUri() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                && appContext != null
+                && LocalGravacaoVideo == DroidPrefsUtils.LOCAL_GRAVACAO_CARTAO_SD
+                && DroidPrefsUtils.temCartaoSd(appContext)) {
+            Set<String> volumes = MediaStore.getExternalVolumeNames(appContext);
+            for (String volume : volumes) {
+                if (!MediaStore.VOLUME_EXTERNAL_PRIMARY.equals(volume)
+                        && !MediaStore.VOLUME_EXTERNAL.equals(volume)) {
+                    return MediaStore.Video.Media.getContentUri(volume);
                 }
             }
         }
-        return strDirectory;
+        return MediaStore.Video.Media.EXTERNAL_CONTENT_URI;
+    }
+
+    public static String GetPathStorage() {
+        try {
+            if (LocalGravacaoVideo == DroidPrefsUtils.LOCAL_GRAVACAO_CARTAO_SD) {
+                File sdDirectory = appContext != null ? DroidPrefsUtils.obtemDiretorioCartaoSd(appContext) : null;
+                if (sdDirectory != null) {
+                    String directory = CreateGetDirectory(new File(sdDirectory, "Recorder").getAbsolutePath());
+                    if (directory.length() > 0) {
+                        return directory;
+                    }
+                }
+
+                if (isExternalStorageMediaMounted()) {
+                    String sdCardPath = System.getenv("SECONDARY_STORAGE");
+                    if ((sdCardPath == null) || (sdCardPath.length() == 0)) {
+                        sdCardPath = System.getenv("EXTERNAL_SDCARD_STORAGE");
+                    }
+                    if (sdCardPath != null && sdCardPath.length() > 0) {
+                        String directory = CreateGetDirectory(sdCardPath + DroidConstants.PASTADOSARQUIVOSGRAVADOS);
+                        if (directory.length() > 0) {
+                            return directory;
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+        }
+
+        File publicDirectory;
+        if (LocalGravacaoVideo == DroidPrefsUtils.LOCAL_GRAVACAO_CAMERA) {
+            publicDirectory = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera");
+        } else {
+            publicDirectory = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "Recorder");
+        }
+        return CreateGetDirectory(publicDirectory.getAbsolutePath());
     }
 
 
@@ -188,10 +221,10 @@ public class DroidVideoRecorder {
             ContentValues values = new ContentValues();
             values.put(MediaStore.Video.Media.DISPLAY_NAME, currentVideoDisplayName);
             values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
-            values.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/Video Recorder");
+            values.put(MediaStore.Video.Media.RELATIVE_PATH, GetMediaStoreRelativePath());
             values.put(MediaStore.Video.Media.IS_PENDING, 1);
 
-            currentVideoUri = appContext.getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values);
+            currentVideoUri = appContext.getContentResolver().insert(GetMediaStoreCollectionUri(), values);
             if (currentVideoUri == null) {
                 throw new IOException("Nao foi possivel criar o arquivo de video");
             }
@@ -361,10 +394,10 @@ public class DroidVideoRecorder {
         ContentValues values = new ContentValues();
         values.put(MediaStore.Video.Media.DISPLAY_NAME, selfie.displayName);
         values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
-        values.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/Video Recorder");
+        values.put(MediaStore.Video.Media.RELATIVE_PATH, GetMediaStoreRelativePath());
         values.put(MediaStore.Video.Media.IS_PENDING, 1);
 
-        Uri mirroredVideoUri = appContext.getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values);
+        Uri mirroredVideoUri = appContext.getContentResolver().insert(GetMediaStoreCollectionUri(), values);
         if (mirroredVideoUri == null) {
             throw new IOException("Nao foi possivel criar o video selfie espelhado");
         }

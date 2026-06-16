@@ -28,6 +28,8 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Created by Robson on 12/01/2016.
@@ -118,24 +120,34 @@ public class DroidConfigurationActivity extends Activity {
                 ScrollView.LayoutParams.MATCH_PARENT,
                 ScrollView.LayoutParams.WRAP_CONTENT));
 
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setPadding(0, 0, 0, dp(22));
+        content.addView(header, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
         TextView title = new TextView(this);
         title.setText(getString(R.string.txt_titulo));
         title.setTextColor(COLOR_PRIMARY_TEXT);
         SetTextSize(title, 28);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setGravity(Gravity.START);
-        content.addView(title, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
+        header.addView(title, new LinearLayout.LayoutParams(
+                0,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                1));
 
-        TextView subtitle = new TextView(this);
-        subtitle.setText(getString(R.string.app_name));
-        subtitle.setTextColor(COLOR_SECONDARY_TEXT);
-        SetTextSize(subtitle, 13);
-        subtitle.setPadding(0, dp(4), 0, dp(22));
-        content.addView(subtitle, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
+        TextView closeButton = new TextView(this);
+        closeButton.setText("X");
+        closeButton.setTextColor(COLOR_PRIMARY_TEXT);
+        closeButton.setGravity(Gravity.CENTER);
+        closeButton.setTypeface(Typeface.DEFAULT_BOLD);
+        SetTextSize(closeButton, 16);
+        closeButton.setBackground(CreateOvalBackground(Color.rgb(54, 56, 64)));
+        closeButton.setOnClickListener(v -> finish());
+        header.addView(closeButton, new LinearLayout.LayoutParams(dp(42), dp(42)));
 
         LinearLayout generalGroup = CreateGroup();
         generalGroup.addView(CreateSwitchRow(
@@ -364,12 +376,17 @@ public class DroidConfigurationActivity extends Activity {
 
     private void ShowStorageDialog() {
         final boolean temCartaoSd = DroidPrefsUtils.temCartaoSd(context);
-        final String[] entries = temCartaoSd
-                ? getResources().getStringArray(R.array.localArquivosGravados)
-                : new String[]{"Interno"};
-        final String[] values = temCartaoSd
-                ? getResources().getStringArray(R.array.valor_localArquivosGravados)
-                : new String[]{"0"};
+        final String[] allEntries = getResources().getStringArray(R.array.localArquivosGravados);
+        final String[] allValues = getResources().getStringArray(R.array.valor_localArquivosGravados);
+        final List<String> entries = new ArrayList<>();
+        final List<String> values = new ArrayList<>();
+        for (int i = 0; i < allEntries.length && i < allValues.length; i++) {
+            if (String.valueOf(DroidPrefsUtils.LOCAL_GRAVACAO_CARTAO_SD).equals(allValues[i]) && !temCartaoSd) {
+                continue;
+            }
+            entries.add(allEntries[i]);
+            values.add(allValues[i]);
+        }
 
         LinearLayout dialogContent = new LinearLayout(this);
         dialogContent.setOrientation(LinearLayout.VERTICAL);
@@ -388,9 +405,8 @@ public class DroidConfigurationActivity extends Activity {
                 .setView(dialogContent)
                 .create();
 
-        for (int i = 0; i < entries.length; i++) {
-            final int index = i;
-            View option = CreateDialogOption(entries[index], values[index], dialog);
+        for (int i = 0; i < entries.size(); i++) {
+            View option = CreateDialogOption(entries.get(i), values.get(i), dialog);
             dialogContent.addView(option);
         }
 

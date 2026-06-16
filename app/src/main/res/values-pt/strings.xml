@@ -26,7 +26,7 @@
     <string name="revisao_video_confirmar_apagar_mensagem">O vídeo poderá ser restaurado pela galeria enquanto estiver na lixeira.</string>
     <string name="revisao_video_cancelar">Cancelar</string>
     <string name="txt_gravacao_videos">Salvar vídeos em</string>
-    <string name="txt_local_gravacao_videos">Interno</string>
+    <string name="txt_local_gravacao_videos">Câmera</string>
     <string name="parando">Parando</string>
     <string name="visualizando">Visualizando</string>
     <string name="gravando">Gravando</string>

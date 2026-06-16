@@ -26,7 +26,7 @@
     <string name="revisao_video_confirmar_apagar_mensagem">You can restore it from the gallery while it is in trash.</string>
     <string name="revisao_video_cancelar">Cancel</string>
     <string name="txt_gravacao_videos">Save videos to</string>
-    <string name="txt_local_gravacao_videos">Internal</string>
+    <string name="txt_local_gravacao_videos">Camera</string>
     <string name="parando">Stopping</string>
     <string name="visualizando">Viewing</string>
     <string name="gravando">Recording</string>
