@@ -21,6 +21,12 @@
             android:summary="@string/spf_salvar_selfies_como_visualizadas_resumo"
             android:title="@string/spf_salvar_selfies_como_visualizadas"></SwitchPreference>
 
+        <SwitchPreference
+            android:defaultValue="false"
+            android:key="spf_revisarVideoAposGravar"
+            android:summary="@string/spf_revisar_video_apos_gravar_resumo"
+            android:title="@string/spf_revisar_video_apos_gravar"></SwitchPreference>
+
         <ListPreference
             android:defaultValue="0"
             android:entries="@array/localArquivosGravados"

@@ -62,6 +62,26 @@ public class DroidVideoRecorder {
     private static Transformer activeMirrorTransformer;
     private static PendingMirroredSelfie activeMirroredSelfie;
 
+    public interface RecordedVideoListener {
+        void OnRecordedVideoReady(RecordedVideo video);
+    }
+
+    public static class RecordedVideo {
+        public final Uri uri;
+        public final String legacyPath;
+        public final String displayName;
+
+        RecordedVideo(Uri uri, String legacyPath, String displayName) {
+            this.uri = uri;
+            this.legacyPath = legacyPath;
+            this.displayName = displayName;
+        }
+
+        public boolean HasVideo() {
+            return uri != null || legacyPath != null;
+        }
+    }
+
     public static DroidConstants.EnumStateRecVideo StateRecVideo;
     public static DroidConstants.EnumTypeViewCam TypeViewCam;
     public static int LocalGravacaoVideo = 0;
@@ -189,7 +209,7 @@ public class DroidVideoRecorder {
         mediaRecorder.setOutputFile(currentLegacyVideoPath);
     }
 
-    private static void FinishCurrentVideoFile() {
+    private static RecordedVideo FinishCurrentVideoFile(RecordedVideoListener listener) {
         CloseCurrentVideoFile();
 
         Uri videoUri = currentVideoUri;
@@ -199,12 +219,16 @@ public class DroidVideoRecorder {
 
         PublishMediaStoreVideo(videoUri);
         if (shouldMirrorFrontVideo) {
-            QueueMirroredSelfie(videoUri, legacyVideoPath, displayName);
+            QueueMirroredSelfie(videoUri, legacyVideoPath, displayName, listener);
         } else if (legacyVideoPath != null) {
             ScanLegacyVideo(legacyVideoPath);
         }
 
         ClearCurrentVideoState();
+        if (shouldMirrorFrontVideo && listener != null) {
+            return null;
+        }
+        return new RecordedVideo(videoUri, legacyVideoPath, displayName);
     }
 
     private static void DeleteCurrentVideoFile() {
@@ -244,12 +268,14 @@ public class DroidVideoRecorder {
         }
     }
 
-    private static void QueueMirroredSelfie(Uri videoUri, String legacyVideoPath, String displayName) {
+    private static void QueueMirroredSelfie(Uri videoUri, String legacyVideoPath, String displayName,
+                                            RecordedVideoListener listener) {
         if (appContext == null || (videoUri == null && legacyVideoPath == null)) {
+            NotifyRecordedVideo(listener, new RecordedVideo(videoUri, legacyVideoPath, displayName));
             return;
         }
 
-        PendingMirroredSelfie selfie = new PendingMirroredSelfie(videoUri, legacyVideoPath, displayName);
+        PendingMirroredSelfie selfie = new PendingMirroredSelfie(videoUri, legacyVideoPath, displayName, listener);
         MIRROR_HANDLER.post(() -> {
             PENDING_MIRRORED_SELFIES.offer(selfie);
             StartNextMirroredSelfie();
@@ -289,6 +315,7 @@ public class DroidVideoRecorder {
                         @Override
                         public void onError(Composition composition, ExportResult result, ExportException exception) {
                             LogException("MirrorSelfie", exception);
+                            NotifyRecordedVideo(activeMirroredSelfie);
                             FinishActiveMirroredSelfie();
                         }
                     })
@@ -296,6 +323,7 @@ public class DroidVideoRecorder {
             activeMirrorTransformer.start(editedMediaItem, activeMirroredSelfie.transformedFile.getAbsolutePath());
         } catch (Exception ex) {
             LogException("MirrorSelfie", ex);
+            NotifyRecordedVideo(activeMirroredSelfie);
             FinishActiveMirroredSelfie();
         }
     }
@@ -308,20 +336,28 @@ public class DroidVideoRecorder {
         }
 
         MIRROR_COPY_EXECUTOR.execute(() -> {
+            RecordedVideo recordedVideo = null;
             try {
                 if (selfie.videoUri != null) {
-                    ReplaceMediaStoreVideo(selfie);
+                    Uri mirroredVideoUri = ReplaceMediaStoreVideo(selfie);
+                    recordedVideo = new RecordedVideo(mirroredVideoUri, null, selfie.displayName);
                 } else {
                     ReplaceLegacyVideo(selfie);
+                    recordedVideo = new RecordedVideo(null, selfie.legacyVideoPath, selfie.displayName);
                 }
             } catch (Exception ex) {
                 LogException("MirrorSelfie", ex);
+                recordedVideo = new RecordedVideo(selfie.videoUri, selfie.legacyVideoPath, selfie.displayName);
             }
-            MIRROR_HANDLER.post(DroidVideoRecorder::FinishActiveMirroredSelfie);
+            RecordedVideo finalRecordedVideo = recordedVideo;
+            MIRROR_HANDLER.post(() -> {
+                NotifyRecordedVideo(selfie.listener, finalRecordedVideo);
+                FinishActiveMirroredSelfie();
+            });
         });
     }
 
-    private static void ReplaceMediaStoreVideo(PendingMirroredSelfie selfie) throws IOException {
+    private static Uri ReplaceMediaStoreVideo(PendingMirroredSelfie selfie) throws IOException {
         ContentValues values = new ContentValues();
         values.put(MediaStore.Video.Media.DISPLAY_NAME, selfie.displayName);
         values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
@@ -343,6 +379,7 @@ public class DroidVideoRecorder {
             }
             PublishMediaStoreVideo(mirroredVideoUri);
             appContext.getContentResolver().delete(selfie.videoUri, null, null);
+            return mirroredVideoUri;
         } catch (Exception ex) {
             appContext.getContentResolver().delete(mirroredVideoUri, null, null);
             throw ex;
@@ -396,16 +433,32 @@ public class DroidVideoRecorder {
         StartNextMirroredSelfie();
     }
 
+    private static void NotifyRecordedVideo(PendingMirroredSelfie selfie) {
+        if (selfie != null) {
+            NotifyRecordedVideo(selfie.listener,
+                    new RecordedVideo(selfie.videoUri, selfie.legacyVideoPath, selfie.displayName));
+        }
+    }
+
+    private static void NotifyRecordedVideo(RecordedVideoListener listener, RecordedVideo video) {
+        if (listener != null && video != null && video.HasVideo()) {
+            listener.OnRecordedVideoReady(video);
+        }
+    }
+
     private static class PendingMirroredSelfie {
         final Uri videoUri;
         final String legacyVideoPath;
         final String displayName;
+        final RecordedVideoListener listener;
         File transformedFile;
 
-        PendingMirroredSelfie(Uri videoUri, String legacyVideoPath, String displayName) {
+        PendingMirroredSelfie(Uri videoUri, String legacyVideoPath, String displayName,
+                              RecordedVideoListener listener) {
             this.videoUri = videoUri;
             this.legacyVideoPath = legacyVideoPath;
             this.displayName = displayName;
+            this.listener = listener;
         }
 
         Uri GetInputUri() {
@@ -658,17 +711,18 @@ public class DroidVideoRecorder {
         {
             LogException("StartRecording", ex);
             DeleteCurrentVideoFile();
-            ResetRecord(false);
+            ResetRecord(false, null);
             return false;
         }
     }
 
-    private static void ResetRecord(boolean record)
+    private static RecordedVideo ResetRecord(boolean record, RecordedVideoListener listener)
     {
+        RecordedVideo recordedVideo = null;
         if (record && mMediaRecorder != null && mediaRecorderStarted) {
             try {
                 mMediaRecorder.stop();
-                FinishCurrentVideoFile();
+                recordedVideo = FinishCurrentVideoFile(listener);
             } catch (Exception ex) {
                 LogException("StopRecording", ex);
                 DeleteCurrentVideoFile();
@@ -703,9 +757,14 @@ public class DroidVideoRecorder {
             mServiceCamera = null;
         }
 
+        return recordedVideo;
     }
 
     public static void OnStopRecording(boolean record) {
+        OnStopRecording(record, null);
+    }
+
+    public static RecordedVideo OnStopRecording(boolean record, RecordedVideoListener listener) {
 
         try {
             if (mServiceCamera != null) {
@@ -714,6 +773,6 @@ public class DroidVideoRecorder {
         } catch (IOException ex) {
             LogException("StopRecording", ex);
         }
-        ResetRecord(record);
+        return ResetRecord(record, listener);
     }
 }

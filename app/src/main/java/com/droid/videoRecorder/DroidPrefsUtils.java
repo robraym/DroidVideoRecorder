@@ -79,6 +79,17 @@ public class DroidPrefsUtils {
         return spf;
     }
 
+    public static boolean revisarVideoAposGravar(final Context context) {
+        boolean spf = false;
+        try {
+            SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
+            spf = sp.getBoolean("spf_revisarVideoAposGravar", false);
+        } catch (Exception ex) {
+            Log.d("DroidVideo", ex.getMessage());
+        }
+        return spf;
+    }
+
     public static int obtemTamanhoBolinha(final Context context, int tamanhoPadrao, int tamanhoMinimo, int tamanhoMaximo) {
         int tamanho = tamanhoPadrao;
         try {

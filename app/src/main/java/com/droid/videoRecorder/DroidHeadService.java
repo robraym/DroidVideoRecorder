@@ -45,6 +45,7 @@ import android.widget.TextView;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Locale;
+import java.lang.ref.WeakReference;
 
 
 public class DroidHeadService extends Service implements TextToSpeech.OnInitListener, SensorEventListener {
@@ -60,6 +61,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     private static final long TWIST_SEQUENCE_TIMEOUT_MS = 900;
     private static final long TWIST_COOLDOWN_MS = 1800;
     private static boolean serviceActive;
+    private static WeakReference<DroidHeadService> activeService = new WeakReference<>(null);
 
     private WindowManager windowManager;
     private ImageView chatHead;
@@ -204,6 +206,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         context = getBaseContext();
         DroidVideoRecorder.TypeViewCam = DroidPrefsUtils.obtemUltimaCamera(context);
         serviceActive = true;
+        activeService = new WeakReference<>(this);
         Log.d("DVR", "DroidHeadService onCreate");
         StartForegroundServiceNotification();
         InicializarVariavel();
@@ -223,6 +226,9 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     public void onDestroy() {
         Log.d("DVR", "DroidHeadService onDestroy");
         serviceActive = false;
+        if (activeService.get() == this) {
+            activeService.clear();
+        }
         super.onDestroy();
         DroidVideoRecorder.OnStopRecording(false);
         if (touchTarget != null) windowManager.removeView(touchTarget);
@@ -604,6 +610,32 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         tts.shutdown();
     }
 
+    public static void SetHiddenByReview(boolean hidden) {
+        DroidHeadService service = activeService.get();
+        if (service != null) {
+            service.mainHandler.post(() -> service.SetHiddenByReviewInternal(hidden));
+        }
+    }
+
+    private void SetHiddenByReviewInternal(boolean hidden) {
+        if (hidden) {
+            HideReadyPreview();
+            if (chatHead != null) chatHead.setVisibility(View.INVISIBLE);
+            if (txtHead != null) txtHead.setVisibility(View.INVISIBLE);
+            if (txtCameraBadge != null) txtCameraBadge.setVisibility(View.INVISIBLE);
+            if (touchTarget != null) touchTarget.setVisibility(View.INVISIBLE);
+            return;
+        }
+
+        if (chatHead != null) chatHead.setVisibility(View.VISIBLE);
+        if (touchTarget != null) touchTarget.setVisibility(View.VISIBLE);
+        if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.STOP) {
+            ShowReadyPreview();
+        } else if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.RECORD) {
+            ShowRecordingPreview();
+        }
+    }
+
     private void FalaComAtraso(final String text, int atrasoSeg) {
         if (DroidPrefsUtils.leComando(context)) {
             tts.speak(text, TextToSpeech.QUEUE_FLUSH, null);
@@ -742,12 +774,27 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     }
 
     private void ShowStopRecord(boolean record) {
-        DroidVideoRecorder.OnStopRecording(record);
+        boolean shouldReviewVideo = record && DroidPrefsUtils.revisarVideoAposGravar(context);
+        DroidVideoRecorder.RecordedVideo recordedVideo = DroidVideoRecorder.OnStopRecording(record,
+                shouldReviewVideo ? video -> mainHandler.post(() -> OpenVideoReview(video)) : null);
         if (record && asyncTask != null) {
             asyncTask.cancel(true);
         }
         ShowStop();
+        if (shouldReviewVideo && recordedVideo != null) {
+            OpenVideoReview(recordedVideo);
+        }
         Vibrar(50);
+    }
+
+    private void OpenVideoReview(DroidVideoRecorder.RecordedVideo video) {
+        if (video == null || !video.HasVideo()) {
+            return;
+        }
+
+        Intent intent = DroidVideoReviewActivity.CreateIntent(context, video);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(intent);
     }
 
     private void GetDefaultStop() {

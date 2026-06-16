@@ -161,6 +161,17 @@ public class DroidConfigurationActivity extends Activity {
                 false,
                 true,
                 null));
+        generalGroup.addView(CreateDivider());
+
+        generalGroup.addView(CreateSwitchRow(
+                "P",
+                COLOR_ICON_BLUE,
+                getString(R.string.spf_revisar_video_apos_gravar),
+                getString(R.string.spf_revisar_video_apos_gravar_resumo),
+                "spf_revisarVideoAposGravar",
+                false,
+                true,
+                null));
         content.addView(generalGroup);
 
         LinearLayout commandGroup = CreateGroup();

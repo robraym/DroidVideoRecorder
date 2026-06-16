@@ -1,0 +1,633 @@
+package com.droid.videoRecorder;
+
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.app.PendingIntent;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentSender;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.media.MediaPlayer;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.provider.MediaStore;
+import android.view.Gravity;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
+import android.view.View;
+import android.view.Window;
+import android.view.WindowManager;
+import android.widget.FrameLayout;
+import android.widget.ImageButton;
+import android.widget.LinearLayout;
+import android.widget.SeekBar;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import androidx.core.content.FileProvider;
+
+import java.io.File;
+import java.util.Collections;
+
+public class DroidVideoReviewActivity extends Activity {
+    private static final String EXTRA_VIDEO_URI = "extra_video_uri";
+    private static final String EXTRA_VIDEO_PATH = "extra_video_path";
+    private static final String EXTRA_DISPLAY_NAME = "extra_display_name";
+    private static final int REQUEST_TRASH_VIDEO = 7310;
+
+    private Uri videoUri;
+    private String videoPath;
+    private String displayName;
+    private FrameLayout videoContainer;
+    private SurfaceView videoView;
+    private MediaPlayer mediaPlayer;
+    private ImageButton playButton;
+    private TextView playLabel;
+    private SeekBar progressBar;
+    private TextView currentTimeLabel;
+    private TextView durationLabel;
+    private final Handler progressHandler = new Handler(Looper.getMainLooper());
+    private boolean userSeeking;
+    private boolean playing;
+    private boolean deleted;
+    private int videoWidth;
+    private int videoHeight;
+
+    private final Runnable progressUpdater = new Runnable() {
+        @Override
+        public void run() {
+            UpdateProgress();
+            progressHandler.postDelayed(this, 250);
+        }
+    };
+
+    public static Intent CreateIntent(Context context, DroidVideoRecorder.RecordedVideo video) {
+        Intent intent = new Intent(context, DroidVideoReviewActivity.class);
+        if (video.uri != null) {
+            intent.putExtra(EXTRA_VIDEO_URI, video.uri.toString());
+        }
+        intent.putExtra(EXTRA_VIDEO_PATH, video.legacyPath);
+        intent.putExtra(EXTRA_DISPLAY_NAME, video.displayName);
+        return intent;
+    }
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        requestWindowFeature(Window.FEATURE_NO_TITLE);
+        super.onCreate(savedInstanceState);
+        ConfigureWindow();
+        ReadIntent();
+
+        if (videoUri == null && videoPath == null) {
+            Toast.makeText(this, getString(R.string.revisao_video_erro), Toast.LENGTH_SHORT).show();
+            finish();
+            return;
+        }
+
+        DroidHeadService.SetHiddenByReview(true);
+        BuildLayout();
+        StartVideo();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (mediaPlayer != null && mediaPlayer.isPlaying()) {
+            mediaPlayer.pause();
+            playing = false;
+            UpdatePlayState();
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        ReleasePlayer();
+        DroidHeadService.SetHiddenByReview(false);
+        super.onDestroy();
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQUEST_TRASH_VIDEO) {
+            return;
+        }
+
+        if (resultCode == RESULT_OK) {
+            deleted = true;
+            Toast.makeText(this, getString(R.string.revisao_video_movido_lixeira), Toast.LENGTH_SHORT).show();
+            finish();
+        } else {
+            StartVideo();
+        }
+    }
+
+    private void ConfigureWindow() {
+        Window window = getWindow();
+        window.setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            window.setStatusBarColor(Color.BLACK);
+            window.setNavigationBarColor(Color.BLACK);
+        }
+        window.getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+    }
+
+    private void ReadIntent() {
+        Intent intent = getIntent();
+        String uriText = intent.getStringExtra(EXTRA_VIDEO_URI);
+        videoUri = uriText != null ? Uri.parse(uriText) : null;
+        videoPath = intent.getStringExtra(EXTRA_VIDEO_PATH);
+        displayName = intent.getStringExtra(EXTRA_DISPLAY_NAME);
+    }
+
+    private void BuildLayout() {
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(Color.BLACK);
+
+        videoContainer = new FrameLayout(this);
+        videoContainer.setBackgroundColor(Color.BLACK);
+        FrameLayout.LayoutParams videoContainerParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT);
+        videoContainerParams.setMargins(0, dp(110), 0, dp(182));
+        root.addView(videoContainer, videoContainerParams);
+
+        videoView = new SurfaceView(this);
+        videoView.setBackgroundColor(Color.BLACK);
+        videoView.setZOrderOnTop(true);
+        videoView.getHolder().addCallback(new SurfaceHolder.Callback() {
+            @Override
+            public void surfaceCreated(SurfaceHolder holder) {
+                PrepareVideo(holder);
+            }
+
+            @Override
+            public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+                UpdateVideoLayout();
+            }
+
+            @Override
+            public void surfaceDestroyed(SurfaceHolder holder) {
+                ReleasePlayer();
+            }
+        });
+        videoContainer.addView(videoView, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                Gravity.CENTER));
+
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.VERTICAL);
+        header.setPadding(dp(22), dp(28), dp(22), dp(18));
+        header.setBackgroundColor(Color.argb(178, 0, 0, 0));
+
+        TextView title = new TextView(this);
+        title.setText(getString(R.string.revisao_video_titulo));
+        title.setTextColor(Color.WHITE);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTextSize(24);
+        header.addView(title);
+
+        TextView subtitle = new TextView(this);
+        subtitle.setText(getString(R.string.revisao_video_subtitulo));
+        subtitle.setTextColor(Color.rgb(190, 193, 201));
+        subtitle.setTextSize(14);
+        subtitle.setPadding(0, dp(4), 0, 0);
+        header.addView(subtitle);
+
+        FrameLayout.LayoutParams headerParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP);
+        root.addView(header, headerParams);
+
+        LinearLayout progressPanel = CreateProgressPanel();
+        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM);
+        progressParams.setMargins(dp(18), 0, dp(18), dp(118));
+        root.addView(progressPanel, progressParams);
+
+        LinearLayout controls = new LinearLayout(this);
+        controls.setOrientation(LinearLayout.HORIZONTAL);
+        controls.setGravity(Gravity.CENTER);
+        controls.setPadding(dp(12), dp(10), dp(12), dp(10));
+        controls.setBackground(CreateRounded(Color.rgb(28, 29, 33), dp(28)));
+
+        LinearLayout.LayoutParams controlItemParams = new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1);
+        controls.addView(CreatePlayControl(), controlItemParams);
+        controls.addView(CreateControl(android.R.drawable.ic_menu_share,
+                getString(R.string.revisao_video_compartilhar),
+                Color.rgb(48, 118, 230),
+                v -> ShareVideo()), controlItemParams);
+        controls.addView(CreateControl(android.R.drawable.ic_menu_delete,
+                getString(R.string.revisao_video_apagar),
+                Color.rgb(232, 65, 72),
+                v -> ShowDeleteConfirmation()), controlItemParams);
+        controls.addView(CreateControl(android.R.drawable.ic_menu_close_clear_cancel,
+                getString(R.string.revisao_video_fechar),
+                Color.rgb(76, 78, 86),
+                v -> finish()), controlItemParams);
+
+        FrameLayout.LayoutParams controlsParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM);
+        controlsParams.setMargins(dp(16), 0, dp(16), dp(24));
+        root.addView(controls, controlsParams);
+
+        setContentView(root);
+    }
+
+    private LinearLayout CreateProgressPanel() {
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.HORIZONTAL);
+        panel.setGravity(Gravity.CENTER_VERTICAL);
+        panel.setPadding(dp(14), dp(8), dp(14), dp(8));
+        panel.setBackground(CreateRounded(Color.rgb(22, 23, 27), dp(22)));
+
+        currentTimeLabel = CreateTimeLabel("00:00");
+        panel.addView(currentTimeLabel);
+
+        progressBar = new SeekBar(this);
+        progressBar.setMax(0);
+        progressBar.setProgress(0);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            progressBar.setProgressTintList(android.content.res.ColorStateList.valueOf(Color.rgb(28, 145, 96)));
+            progressBar.setThumbTintList(android.content.res.ColorStateList.valueOf(Color.WHITE));
+            progressBar.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.rgb(80, 82, 90)));
+        }
+        progressBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (fromUser) {
+                    currentTimeLabel.setText(FormatTime(progress));
+                }
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+                userSeeking = true;
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                if (mediaPlayer != null) {
+                    mediaPlayer.seekTo(seekBar.getProgress());
+                }
+                userSeeking = false;
+                UpdateProgress();
+            }
+        });
+        LinearLayout.LayoutParams seekParams = new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                1);
+        seekParams.setMargins(dp(8), 0, dp(8), 0);
+        panel.addView(progressBar, seekParams);
+
+        durationLabel = CreateTimeLabel("00:00");
+        panel.addView(durationLabel);
+
+        return panel;
+    }
+
+    private TextView CreateTimeLabel(String text) {
+        TextView label = new TextView(this);
+        label.setText(text);
+        label.setTextColor(Color.rgb(232, 233, 238));
+        label.setTextSize(11);
+        label.setGravity(Gravity.CENTER);
+        label.setTypeface(Typeface.DEFAULT_BOLD);
+        label.setMinWidth(dp(42));
+        return label;
+    }
+
+    private View CreatePlayControl() {
+        LinearLayout container = CreateControlContainer();
+        playButton = CreateIconButton(android.R.drawable.ic_media_pause, Color.rgb(28, 145, 96));
+        playButton.setOnClickListener(v -> TogglePlay());
+        container.addView(playButton);
+        playLabel = CreateControlLabel(getString(R.string.revisao_video_pause));
+        container.addView(playLabel);
+        return container;
+    }
+
+    private View CreateControl(int icon, String label, int color, View.OnClickListener listener) {
+        LinearLayout container = CreateControlContainer();
+        ImageButton button = CreateIconButton(icon, color);
+        button.setOnClickListener(listener);
+        container.addView(button);
+        container.addView(CreateControlLabel(label));
+        return container;
+    }
+
+    private LinearLayout CreateControlContainer() {
+        LinearLayout container = new LinearLayout(this);
+        container.setOrientation(LinearLayout.VERTICAL);
+        container.setGravity(Gravity.CENTER);
+        container.setPadding(dp(2), 0, dp(2), 0);
+        return container;
+    }
+
+    private ImageButton CreateIconButton(int icon, int color) {
+        ImageButton button = new ImageButton(this);
+        button.setImageResource(icon);
+        button.setColorFilter(Color.WHITE);
+        button.setBackground(CreateRounded(color, dp(22)));
+        button.setPadding(dp(10), dp(10), dp(10), dp(10));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(44), dp(44));
+        button.setLayoutParams(params);
+        return button;
+    }
+
+    private TextView CreateControlLabel(String text) {
+        TextView label = new TextView(this);
+        label.setText(text);
+        label.setTextColor(Color.rgb(232, 233, 238));
+        label.setTextSize(9);
+        label.setGravity(Gravity.CENTER);
+        label.setSingleLine(true);
+        label.setPadding(0, dp(6), 0, 0);
+        return label;
+    }
+
+    private GradientDrawable CreateRounded(int color, int radius) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(color);
+        drawable.setCornerRadius(radius);
+        return drawable;
+    }
+
+    private void StartVideo() {
+        if (videoView != null && videoView.getHolder().getSurface().isValid()) {
+            PrepareVideo(videoView.getHolder());
+        }
+    }
+
+    private void PrepareVideo(SurfaceHolder holder) {
+        try {
+            ReleasePlayer();
+            mediaPlayer = new MediaPlayer();
+            if (videoUri != null) {
+                mediaPlayer.setDataSource(this, videoUri);
+            } else {
+                mediaPlayer.setDataSource(videoPath);
+            }
+            mediaPlayer.setDisplay(holder);
+            mediaPlayer.setLooping(false);
+            mediaPlayer.setOnPreparedListener(player -> {
+                videoWidth = player.getVideoWidth();
+                videoHeight = player.getVideoHeight();
+                UpdateVideoLayout();
+                UpdateDuration();
+                player.start();
+                playing = true;
+                UpdatePlayState();
+                StartProgressUpdates();
+            });
+            mediaPlayer.setOnCompletionListener(player -> {
+                playing = false;
+                if (progressBar != null) {
+                    progressBar.setProgress(progressBar.getMax());
+                }
+                if (currentTimeLabel != null) {
+                    currentTimeLabel.setText(FormatTime(player.getDuration()));
+                }
+                UpdatePlayState();
+            });
+            mediaPlayer.setOnErrorListener((player, what, extra) -> {
+                Toast.makeText(this, getString(R.string.revisao_video_erro), Toast.LENGTH_SHORT).show();
+                playing = false;
+                UpdatePlayState();
+                return true;
+            });
+            mediaPlayer.prepareAsync();
+        } catch (Exception ex) {
+            Toast.makeText(this, getString(R.string.revisao_video_erro), Toast.LENGTH_SHORT).show();
+            playing = false;
+            UpdatePlayState();
+        }
+    }
+
+    private void UpdateVideoLayout() {
+        if (videoContainer == null || videoView == null || videoWidth <= 0 || videoHeight <= 0
+                || videoContainer.getWidth() <= 0 || videoContainer.getHeight() <= 0) {
+            return;
+        }
+
+        int viewWidth = videoContainer.getWidth();
+        int viewHeight = videoContainer.getHeight();
+        int displayVideoWidth = videoWidth;
+        int displayVideoHeight = videoHeight;
+        if ((viewHeight > viewWidth && videoWidth > videoHeight)
+                || (viewWidth > viewHeight && videoHeight > videoWidth)) {
+            displayVideoWidth = videoHeight;
+            displayVideoHeight = videoWidth;
+        }
+
+        float scale = Math.min(viewWidth / (float) displayVideoWidth,
+                viewHeight / (float) displayVideoHeight);
+        int scaledWidth = Math.max(1, Math.round(displayVideoWidth * scale));
+        int scaledHeight = Math.max(1, Math.round(displayVideoHeight * scale));
+
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                scaledWidth,
+                scaledHeight,
+                Gravity.CENTER);
+        videoView.setLayoutParams(params);
+    }
+
+    private void ReleasePlayer() {
+        StopProgressUpdates();
+        if (mediaPlayer != null) {
+            try {
+                mediaPlayer.stop();
+            } catch (Exception ignored) {
+            }
+            mediaPlayer.release();
+            mediaPlayer = null;
+        }
+    }
+
+    private void TogglePlay() {
+        if (mediaPlayer == null || deleted) {
+            return;
+        }
+
+        if (mediaPlayer.isPlaying()) {
+            mediaPlayer.pause();
+            playing = false;
+        } else {
+            mediaPlayer.start();
+            playing = true;
+        }
+        UpdatePlayState();
+    }
+
+    private void UpdatePlayState() {
+        if (playButton == null || playLabel == null) {
+            return;
+        }
+        playButton.setImageResource(playing ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play);
+        playLabel.setText(playing ? getString(R.string.revisao_video_pause) : getString(R.string.revisao_video_play));
+    }
+
+    private void StartProgressUpdates() {
+        progressHandler.removeCallbacks(progressUpdater);
+        progressHandler.post(progressUpdater);
+    }
+
+    private void StopProgressUpdates() {
+        progressHandler.removeCallbacks(progressUpdater);
+    }
+
+    private void UpdateDuration() {
+        if (mediaPlayer == null || progressBar == null || durationLabel == null) {
+            return;
+        }
+
+        int duration = Math.max(0, mediaPlayer.getDuration());
+        progressBar.setMax(duration);
+        durationLabel.setText(FormatTime(duration));
+        UpdateProgress();
+    }
+
+    private void UpdateProgress() {
+        if (mediaPlayer == null || progressBar == null || currentTimeLabel == null || userSeeking) {
+            return;
+        }
+
+        try {
+            int position = Math.max(0, mediaPlayer.getCurrentPosition());
+            progressBar.setProgress(position);
+            currentTimeLabel.setText(FormatTime(position));
+        } catch (Exception ignored) {
+        }
+    }
+
+    private String FormatTime(int milliseconds) {
+        int totalSeconds = Math.max(0, milliseconds / 1000);
+        int minutes = totalSeconds / 60;
+        int seconds = totalSeconds % 60;
+        return String.format(java.util.Locale.US, "%02d:%02d", minutes, seconds);
+    }
+
+    private void ShowDeleteConfirmation() {
+        if (deleted) {
+            finish();
+            return;
+        }
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(getString(R.string.revisao_video_confirmar_apagar_titulo))
+                .setMessage(getString(R.string.revisao_video_confirmar_apagar_mensagem))
+                .setNegativeButton(getString(R.string.revisao_video_cancelar), null)
+                .setPositiveButton(getString(R.string.revisao_video_mover_lixeira), (dialogInterface, which) -> MoveVideoToTrash())
+                .create();
+        dialog.setOnShowListener(dialogInterface -> {
+            dialog.getWindow().setBackgroundDrawable(CreateRounded(Color.rgb(34, 35, 39), dp(22)));
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(Color.rgb(190, 193, 201));
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(Color.rgb(232, 65, 72));
+        });
+        dialog.show();
+    }
+
+    private void MoveVideoToTrash() {
+        if (deleted) {
+            finish();
+            return;
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && videoUri != null) {
+            try {
+                ReleasePlayer();
+                PendingIntent request = MediaStore.createTrashRequest(
+                        getContentResolver(),
+                        Collections.singletonList(videoUri),
+                        true);
+                startIntentSenderForResult(
+                        request.getIntentSender(),
+                        REQUEST_TRASH_VIDEO,
+                        null,
+                        0,
+                        0,
+                        0);
+                return;
+            } catch (IntentSender.SendIntentException ex) {
+                StartVideo();
+                Toast.makeText(this, getString(R.string.revisao_video_erro), Toast.LENGTH_SHORT).show();
+                return;
+            } catch (Exception ignored) {
+            }
+        }
+
+        DeleteVideoPermanently();
+    }
+
+    private void DeleteVideoPermanently() {
+        if (deleted) {
+            finish();
+            return;
+        }
+
+        boolean success = false;
+        try {
+            ReleasePlayer();
+            if (videoUri != null) {
+                success = getContentResolver().delete(videoUri, null, null) > 0;
+            } else if (videoPath != null) {
+                success = new File(videoPath).delete();
+            }
+        } catch (Exception ignored) {
+        }
+
+        if (success) {
+            deleted = true;
+            Toast.makeText(this, getString(R.string.revisao_video_movido_lixeira), Toast.LENGTH_SHORT).show();
+            finish();
+        } else {
+            Toast.makeText(this, getString(R.string.revisao_video_erro), Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void ShareVideo() {
+        Uri shareUri = GetShareUri();
+        if (shareUri == null) {
+            Toast.makeText(this, getString(R.string.revisao_video_erro), Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        Intent shareIntent = new Intent(Intent.ACTION_SEND);
+        shareIntent.setType("video/mp4");
+        shareIntent.putExtra(Intent.EXTRA_STREAM, shareUri);
+        shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        startActivity(Intent.createChooser(shareIntent, getString(R.string.revisao_video_compartilhar_com)));
+    }
+
+    private Uri GetShareUri() {
+        if (videoUri != null) {
+            return videoUri;
+        }
+        if (videoPath == null) {
+            return null;
+        }
+        return FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", new File(videoPath));
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+}

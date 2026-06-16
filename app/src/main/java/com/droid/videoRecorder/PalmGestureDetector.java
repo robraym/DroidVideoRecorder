@@ -25,8 +25,9 @@ class PalmGestureDetector {
     }
 
     private static final String MODEL_ASSET = "gesture_recognizer.task";
-    private static final long ANALYSIS_INTERVAL_MS = 300;
-    private static final float MIN_OPEN_PALM_SCORE = 0.45f;
+    private static final long ANALYSIS_INTERVAL_MS = 180;
+    private static final float MIN_OPEN_PALM_SCORE = 0.38f;
+    private static final float INSTANT_OPEN_PALM_SCORE = 0.72f;
     private static final int REQUIRED_CONSECUTIVE_DETECTIONS = 2;
     private static final int MIN_SUPPORTED_SDK = Build.VERSION_CODES.P;
 
@@ -57,7 +58,7 @@ class PalmGestureDetector {
             }
 
             if (!analyzing && previewView.isAvailable()) {
-                Bitmap bitmap = previewView.getBitmap(256, 256);
+                Bitmap bitmap = previewView.getBitmap(224, 224);
                 if (bitmap != null) {
                     analyzing = true;
                     executor.execute(() -> Analyze(bitmap));
@@ -104,8 +105,8 @@ class PalmGestureDetector {
             EnsureGestureRecognizer();
             image = new BitmapImageBuilder(bitmap).build();
             GestureRecognizerResult result = gestureRecognizer.recognize(image);
-            boolean openPalmDetected = ContainsOpenPalm(result.gestures());
-            mainHandler.post(() -> HandleResult(openPalmDetected));
+            float openPalmScore = GetOpenPalmScore(result.gestures());
+            mainHandler.post(() -> HandleResult(openPalmScore));
         } catch (Throwable ex) {
             runtimeSupported = false;
             Log.e("DVR", "Falha ao reconhecer gesto de palma", ex);
@@ -130,8 +131,8 @@ class PalmGestureDetector {
         GestureRecognizer.GestureRecognizerOptions options =
                 GestureRecognizer.GestureRecognizerOptions.builder()
                         .setBaseOptions(baseOptions)
-                        .setMinHandDetectionConfidence(0.5f)
-                        .setMinHandPresenceConfidence(0.5f)
+                        .setMinHandDetectionConfidence(0.35f)
+                        .setMinHandPresenceConfidence(0.35f)
                         .build();
         gestureRecognizer = GestureRecognizer.createFromOptions(context, options);
         Log.d("DVR-PALM", "Detector de palma inicializado");
@@ -149,19 +150,22 @@ class PalmGestureDetector {
         Log.d("DVR-PALM", "Gesto de palma desativado neste Android por compatibilidade");
     }
 
-    private boolean ContainsOpenPalm(List<List<Category>> gestures) {
+    private float GetOpenPalmScore(List<List<Category>> gestures) {
         Category bestGesture = null;
+        float openPalmScore = 0f;
         for (List<Category> handGestures : gestures) {
             for (Category gesture : handGestures) {
                 if (bestGesture == null || gesture.score() > bestGesture.score()) {
                     bestGesture = gesture;
                 }
-                if ("Open_Palm".equals(gesture.categoryName())
-                        && gesture.score() >= MIN_OPEN_PALM_SCORE) {
-                    Log.d("DVR-PALM", "Palma aberta reconhecida: " + gesture.score());
-                    return true;
+                if ("Open_Palm".equals(gesture.categoryName())) {
+                    openPalmScore = Math.max(openPalmScore, gesture.score());
                 }
             }
+        }
+        if (openPalmScore >= MIN_OPEN_PALM_SCORE) {
+            Log.d("DVR-PALM", "Palma aberta reconhecida: " + openPalmScore);
+            return openPalmScore;
         }
         if (bestGesture != null && !bestGesture.categoryName().equals(lastLoggedGesture)) {
             lastLoggedGesture = bestGesture.categoryName();
@@ -169,19 +173,21 @@ class PalmGestureDetector {
                     + bestGesture.categoryName()
                     + " (" + bestGesture.score() + ")");
         }
-        return false;
+        return 0f;
     }
 
-    private void HandleResult(boolean openPalmDetected) {
+    private void HandleResult(float openPalmScore) {
         if (!active) {
             return;
         }
 
+        boolean openPalmDetected = openPalmScore >= MIN_OPEN_PALM_SCORE;
         consecutiveDetections = openPalmDetected ? consecutiveDetections + 1 : 0;
         if (openPalmDetected) {
             Log.d("DVR-PALM", "Confirmacao de palma: " + consecutiveDetections);
         }
-        if (consecutiveDetections < REQUIRED_CONSECUTIVE_DETECTIONS) {
+        if (openPalmScore < INSTANT_OPEN_PALM_SCORE
+                && consecutiveDetections < REQUIRED_CONSECUTIVE_DETECTIONS) {
             return;
         }
 
