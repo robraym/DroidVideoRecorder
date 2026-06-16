@@ -16,7 +16,7 @@
             android:title="@string/spf_titulo"></SwitchPreference>
 
         <SwitchPreference
-            android:defaultValue="false"
+            android:defaultValue="true"
             android:key="spf_salvarSelfiesComoVisualizadas"
             android:summary="@string/spf_salvar_selfies_como_visualizadas_resumo"
             android:title="@string/spf_salvar_selfies_como_visualizadas"></SwitchPreference>

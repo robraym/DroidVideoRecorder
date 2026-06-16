@@ -25,9 +25,10 @@ class PalmGestureDetector {
     }
 
     private static final String MODEL_ASSET = "gesture_recognizer.task";
-    private static final long ANALYSIS_INTERVAL_MS = 180;
-    private static final float MIN_OPEN_PALM_SCORE = 0.38f;
-    private static final float INSTANT_OPEN_PALM_SCORE = 0.72f;
+    private static final int ANALYSIS_IMAGE_SIZE = 192;
+    private static final long ANALYSIS_INTERVAL_MS = 110;
+    private static final float MIN_OPEN_PALM_SCORE = 0.32f;
+    private static final float INSTANT_OPEN_PALM_SCORE = 0.55f;
     private static final int REQUIRED_CONSECUTIVE_DETECTIONS = 2;
     private static final int MIN_SUPPORTED_SDK = Build.VERSION_CODES.P;
 
@@ -58,7 +59,7 @@ class PalmGestureDetector {
             }
 
             if (!analyzing && previewView.isAvailable()) {
-                Bitmap bitmap = previewView.getBitmap(224, 224);
+                Bitmap bitmap = previewView.getBitmap(ANALYSIS_IMAGE_SIZE, ANALYSIS_IMAGE_SIZE);
                 if (bitmap != null) {
                     analyzing = true;
                     executor.execute(() -> Analyze(bitmap));
@@ -79,6 +80,7 @@ class PalmGestureDetector {
         }
         active = true;
         consecutiveDetections = 0;
+        executor.execute(this::EnsureGestureRecognizer);
         mainHandler.post(analyzeFrame);
     }
 
@@ -131,8 +133,8 @@ class PalmGestureDetector {
         GestureRecognizer.GestureRecognizerOptions options =
                 GestureRecognizer.GestureRecognizerOptions.builder()
                         .setBaseOptions(baseOptions)
-                        .setMinHandDetectionConfidence(0.35f)
-                        .setMinHandPresenceConfidence(0.35f)
+                        .setMinHandDetectionConfidence(0.25f)
+                        .setMinHandPresenceConfidence(0.25f)
                         .build();
         gestureRecognizer = GestureRecognizer.createFromOptions(context, options);
         Log.d("DVR-PALM", "Detector de palma inicializado");

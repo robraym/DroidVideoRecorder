@@ -75,7 +75,7 @@ public class DroidPrefsUtils {
         boolean spf = false;
         try {
             SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
-            spf = sp.getBoolean("spf_salvarSelfiesComoVisualizadas", false);
+            spf = sp.getBoolean("spf_salvarSelfiesComoVisualizadas", true);
         } catch (Exception ex) {
             Log.d("DroidVideo", ex.getMessage());
         }

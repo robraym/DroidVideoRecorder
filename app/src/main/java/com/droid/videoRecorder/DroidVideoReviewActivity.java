@@ -3,13 +3,13 @@ package com.droid.videoRecorder;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.PendingIntent;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentSender;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
-import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -17,8 +17,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.MediaStore;
 import android.view.Gravity;
-import android.view.SurfaceHolder;
-import android.view.SurfaceView;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
@@ -30,6 +28,13 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.core.content.FileProvider;
+import androidx.media3.common.C;
+import androidx.media3.common.MediaItem;
+import androidx.media3.common.PlaybackException;
+import androidx.media3.common.Player;
+import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.ui.AspectRatioFrameLayout;
+import androidx.media3.ui.PlayerView;
 
 import java.io.File;
 import java.util.Collections;
@@ -44,8 +49,8 @@ public class DroidVideoReviewActivity extends Activity {
     private String videoPath;
     private String displayName;
     private FrameLayout videoContainer;
-    private SurfaceView videoView;
-    private MediaPlayer mediaPlayer;
+    private PlayerView videoView;
+    private ExoPlayer mediaPlayer;
     private ImageButton playButton;
     private TextView playLabel;
     private SeekBar progressBar;
@@ -55,8 +60,6 @@ public class DroidVideoReviewActivity extends Activity {
     private boolean userSeeking;
     private boolean playing;
     private boolean deleted;
-    private int videoWidth;
-    private int videoHeight;
 
     private final Runnable progressUpdater = new Runnable() {
         @Override
@@ -163,25 +166,11 @@ public class DroidVideoReviewActivity extends Activity {
         videoContainerParams.setMargins(0, dp(110), 0, dp(182));
         root.addView(videoContainer, videoContainerParams);
 
-        videoView = new SurfaceView(this);
+        videoView = new PlayerView(this);
         videoView.setBackgroundColor(Color.BLACK);
-        videoView.setZOrderOnTop(true);
-        videoView.getHolder().addCallback(new SurfaceHolder.Callback() {
-            @Override
-            public void surfaceCreated(SurfaceHolder holder) {
-                PrepareVideo(holder);
-            }
-
-            @Override
-            public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-                UpdateVideoLayout();
-            }
-
-            @Override
-            public void surfaceDestroyed(SurfaceHolder holder) {
-                ReleasePlayer();
-            }
-        });
+        videoView.setUseController(false);
+        videoView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
+        videoView.setShutterBackgroundColor(Color.BLACK);
         videoContainer.addView(videoView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -372,49 +361,51 @@ public class DroidVideoReviewActivity extends Activity {
     }
 
     private void StartVideo() {
-        if (videoView != null && videoView.getHolder().getSurface().isValid()) {
-            PrepareVideo(videoView.getHolder());
-        }
+        PrepareVideo();
     }
 
-    private void PrepareVideo(SurfaceHolder holder) {
+    private void PrepareVideo() {
         try {
             ReleasePlayer();
-            mediaPlayer = new MediaPlayer();
-            if (videoUri != null) {
-                mediaPlayer.setDataSource(this, videoUri);
-            } else {
-                mediaPlayer.setDataSource(videoPath);
-            }
-            mediaPlayer.setDisplay(holder);
-            mediaPlayer.setLooping(false);
-            mediaPlayer.setOnPreparedListener(player -> {
-                videoWidth = player.getVideoWidth();
-                videoHeight = player.getVideoHeight();
-                UpdateVideoLayout();
-                UpdateDuration();
-                player.start();
-                playing = true;
-                UpdatePlayState();
-                StartProgressUpdates();
-            });
-            mediaPlayer.setOnCompletionListener(player -> {
-                playing = false;
-                if (progressBar != null) {
-                    progressBar.setProgress(progressBar.getMax());
+            mediaPlayer = new ExoPlayer.Builder(this).build();
+            videoView.setPlayer(mediaPlayer);
+            Uri sourceUri = videoUri != null ? videoUri : Uri.fromFile(new File(videoPath));
+            mediaPlayer.setMediaItem(MediaItem.fromUri(sourceUri));
+            mediaPlayer.addListener(new Player.Listener() {
+                @Override
+                public void onPlaybackStateChanged(int playbackState) {
+                    if (playbackState == Player.STATE_READY) {
+                        UpdateDuration();
+                        playing = mediaPlayer != null && mediaPlayer.isPlaying();
+                        UpdatePlayState();
+                        StartProgressUpdates();
+                    } else if (playbackState == Player.STATE_ENDED) {
+                        playing = false;
+                        if (progressBar != null) {
+                            progressBar.setProgress(progressBar.getMax());
+                        }
+                        if (currentTimeLabel != null && mediaPlayer != null) {
+                            currentTimeLabel.setText(FormatTime(GetSafeDuration()));
+                        }
+                        UpdatePlayState();
+                    }
                 }
-                if (currentTimeLabel != null) {
-                    currentTimeLabel.setText(FormatTime(player.getDuration()));
+
+                @Override
+                public void onIsPlayingChanged(boolean isPlaying) {
+                    playing = isPlaying;
+                    UpdatePlayState();
                 }
-                UpdatePlayState();
+
+                @Override
+                public void onPlayerError(PlaybackException error) {
+                    Toast.makeText(DroidVideoReviewActivity.this, getString(R.string.revisao_video_erro), Toast.LENGTH_SHORT).show();
+                    playing = false;
+                    UpdatePlayState();
+                }
             });
-            mediaPlayer.setOnErrorListener((player, what, extra) -> {
-                Toast.makeText(this, getString(R.string.revisao_video_erro), Toast.LENGTH_SHORT).show();
-                playing = false;
-                UpdatePlayState();
-                return true;
-            });
-            mediaPlayer.prepareAsync();
+            mediaPlayer.prepare();
+            mediaPlayer.play();
         } catch (Exception ex) {
             Toast.makeText(this, getString(R.string.revisao_video_erro), Toast.LENGTH_SHORT).show();
             playing = false;
@@ -422,41 +413,10 @@ public class DroidVideoReviewActivity extends Activity {
         }
     }
 
-    private void UpdateVideoLayout() {
-        if (videoContainer == null || videoView == null || videoWidth <= 0 || videoHeight <= 0
-                || videoContainer.getWidth() <= 0 || videoContainer.getHeight() <= 0) {
-            return;
-        }
-
-        int viewWidth = videoContainer.getWidth();
-        int viewHeight = videoContainer.getHeight();
-        int displayVideoWidth = videoWidth;
-        int displayVideoHeight = videoHeight;
-        if ((viewHeight > viewWidth && videoWidth > videoHeight)
-                || (viewWidth > viewHeight && videoHeight > videoWidth)) {
-            displayVideoWidth = videoHeight;
-            displayVideoHeight = videoWidth;
-        }
-
-        float scale = Math.min(viewWidth / (float) displayVideoWidth,
-                viewHeight / (float) displayVideoHeight);
-        int scaledWidth = Math.max(1, Math.round(displayVideoWidth * scale));
-        int scaledHeight = Math.max(1, Math.round(displayVideoHeight * scale));
-
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                scaledWidth,
-                scaledHeight,
-                Gravity.CENTER);
-        videoView.setLayoutParams(params);
-    }
-
     private void ReleasePlayer() {
         StopProgressUpdates();
         if (mediaPlayer != null) {
-            try {
-                mediaPlayer.stop();
-            } catch (Exception ignored) {
-            }
+            videoView.setPlayer(null);
             mediaPlayer.release();
             mediaPlayer = null;
         }
@@ -471,7 +431,7 @@ public class DroidVideoReviewActivity extends Activity {
             mediaPlayer.pause();
             playing = false;
         } else {
-            mediaPlayer.start();
+            mediaPlayer.play();
             playing = true;
         }
         UpdatePlayState();
@@ -499,7 +459,7 @@ public class DroidVideoReviewActivity extends Activity {
             return;
         }
 
-        int duration = Math.max(0, mediaPlayer.getDuration());
+        int duration = GetSafeDuration();
         progressBar.setMax(duration);
         durationLabel.setText(FormatTime(duration));
         UpdateProgress();
@@ -511,11 +471,18 @@ public class DroidVideoReviewActivity extends Activity {
         }
 
         try {
-            int position = Math.max(0, mediaPlayer.getCurrentPosition());
+            int position = (int) Math.max(0, Math.min(Integer.MAX_VALUE, mediaPlayer.getCurrentPosition()));
             progressBar.setProgress(position);
             currentTimeLabel.setText(FormatTime(position));
         } catch (Exception ignored) {
         }
+    }
+
+    private int GetSafeDuration() {
+        if (mediaPlayer == null || mediaPlayer.getDuration() == C.TIME_UNSET) {
+            return 0;
+        }
+        return (int) Math.max(0, Math.min(Integer.MAX_VALUE, mediaPlayer.getDuration()));
     }
 
     private String FormatTime(int milliseconds) {
@@ -554,6 +521,13 @@ public class DroidVideoReviewActivity extends Activity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && videoUri != null) {
             try {
                 ReleasePlayer();
+                if (MoveMediaStoreVideoToTrashDirectly()) {
+                    deleted = true;
+                    Toast.makeText(this, getString(R.string.revisao_video_movido_lixeira), Toast.LENGTH_SHORT).show();
+                    finish();
+                    return;
+                }
+
                 PendingIntent request = MediaStore.createTrashRequest(
                         getContentResolver(),
                         Collections.singletonList(videoUri),
@@ -575,6 +549,20 @@ public class DroidVideoReviewActivity extends Activity {
         }
 
         DeleteVideoPermanently();
+    }
+
+    private boolean MoveMediaStoreVideoToTrashDirectly() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || videoUri == null) {
+            return false;
+        }
+
+        try {
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.MediaColumns.IS_TRASHED, 1);
+            return getContentResolver().update(videoUri, values, null, null) > 0;
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
     private void DeleteVideoPermanently() {

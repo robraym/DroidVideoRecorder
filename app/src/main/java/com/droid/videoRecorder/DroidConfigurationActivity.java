@@ -170,7 +170,7 @@ public class DroidConfigurationActivity extends Activity {
                 getString(R.string.spf_salvar_selfies_como_visualizadas),
                 getString(R.string.spf_salvar_selfies_como_visualizadas_resumo),
                 "spf_salvarSelfiesComoVisualizadas",
-                false,
+                true,
                 true,
                 null));
         generalGroup.addView(CreateDivider());
