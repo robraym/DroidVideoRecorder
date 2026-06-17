@@ -3,6 +3,7 @@ package com.droid.videoRecorder;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.PendingIntent;
+import android.animation.Animator;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
@@ -18,8 +19,10 @@ import android.os.Looper;
 import android.provider.MediaStore;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewAnimationUtils;
 import android.view.Window;
 import android.view.WindowManager;
+import android.view.animation.AccelerateDecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
@@ -43,11 +46,15 @@ public class DroidVideoReviewActivity extends Activity {
     private static final String EXTRA_VIDEO_URI = "extra_video_uri";
     private static final String EXTRA_VIDEO_PATH = "extra_video_path";
     private static final String EXTRA_DISPLAY_NAME = "extra_display_name";
+    private static final String EXTRA_REVEAL_CENTER_X = "extra_reveal_center_x";
+    private static final String EXTRA_REVEAL_CENTER_Y = "extra_reveal_center_y";
+    private static final String EXTRA_REVEAL_RADIUS = "extra_reveal_radius";
     private static final int REQUEST_TRASH_VIDEO = 7310;
 
     private Uri videoUri;
     private String videoPath;
     private String displayName;
+    private FrameLayout rootView;
     private FrameLayout videoContainer;
     private PlayerView videoView;
     private ExoPlayer mediaPlayer;
@@ -60,6 +67,9 @@ public class DroidVideoReviewActivity extends Activity {
     private boolean userSeeking;
     private boolean playing;
     private boolean deleted;
+    private int revealCenterX;
+    private int revealCenterY;
+    private int revealRadius;
 
     private final Runnable progressUpdater = new Runnable() {
         @Override
@@ -70,12 +80,20 @@ public class DroidVideoReviewActivity extends Activity {
     };
 
     public static Intent CreateIntent(Context context, DroidVideoRecorder.RecordedVideo video) {
+        return CreateIntent(context, video, 0, 0, 0);
+    }
+
+    public static Intent CreateIntent(Context context, DroidVideoRecorder.RecordedVideo video,
+                                      int revealCenterX, int revealCenterY, int revealRadius) {
         Intent intent = new Intent(context, DroidVideoReviewActivity.class);
         if (video.uri != null) {
             intent.putExtra(EXTRA_VIDEO_URI, video.uri.toString());
         }
         intent.putExtra(EXTRA_VIDEO_PATH, video.legacyPath);
         intent.putExtra(EXTRA_DISPLAY_NAME, video.displayName);
+        intent.putExtra(EXTRA_REVEAL_CENTER_X, revealCenterX);
+        intent.putExtra(EXTRA_REVEAL_CENTER_Y, revealCenterY);
+        intent.putExtra(EXTRA_REVEAL_RADIUS, revealRadius);
         return intent;
     }
 
@@ -83,6 +101,7 @@ public class DroidVideoReviewActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         super.onCreate(savedInstanceState);
+        overridePendingTransition(0, 0);
         ConfigureWindow();
         ReadIntent();
 
@@ -152,11 +171,14 @@ public class DroidVideoReviewActivity extends Activity {
         videoUri = uriText != null ? Uri.parse(uriText) : null;
         videoPath = intent.getStringExtra(EXTRA_VIDEO_PATH);
         displayName = intent.getStringExtra(EXTRA_DISPLAY_NAME);
+        revealCenterX = intent.getIntExtra(EXTRA_REVEAL_CENTER_X, 0);
+        revealCenterY = intent.getIntExtra(EXTRA_REVEAL_CENTER_Y, 0);
+        revealRadius = intent.getIntExtra(EXTRA_REVEAL_RADIUS, 0);
     }
 
     private void BuildLayout() {
-        FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(Color.BLACK);
+        rootView = new FrameLayout(this);
+        rootView.setBackgroundColor(Color.BLACK);
 
         videoContainer = new FrameLayout(this);
         videoContainer.setBackgroundColor(Color.BLACK);
@@ -164,7 +186,7 @@ public class DroidVideoReviewActivity extends Activity {
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT);
         videoContainerParams.setMargins(0, dp(110), 0, dp(182));
-        root.addView(videoContainer, videoContainerParams);
+        rootView.addView(videoContainer, videoContainerParams);
 
         videoView = new PlayerView(this);
         videoView.setBackgroundColor(Color.BLACK);
@@ -199,7 +221,7 @@ public class DroidVideoReviewActivity extends Activity {
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.TOP);
-        root.addView(header, headerParams);
+        rootView.addView(header, headerParams);
 
         LinearLayout progressPanel = CreateProgressPanel();
         FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(
@@ -207,7 +229,7 @@ public class DroidVideoReviewActivity extends Activity {
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.BOTTOM);
         progressParams.setMargins(dp(18), 0, dp(18), dp(118));
-        root.addView(progressPanel, progressParams);
+        rootView.addView(progressPanel, progressParams);
 
         LinearLayout controls = new LinearLayout(this);
         controls.setOrientation(LinearLayout.HORIZONTAL);
@@ -236,9 +258,47 @@ public class DroidVideoReviewActivity extends Activity {
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.BOTTOM);
         controlsParams.setMargins(dp(16), 0, dp(16), dp(24));
-        root.addView(controls, controlsParams);
+        rootView.addView(controls, controlsParams);
 
-        setContentView(root);
+        rootView.setVisibility(View.INVISIBLE);
+        setContentView(rootView);
+        RunOpeningReveal();
+    }
+
+    private void RunOpeningReveal() {
+        if (rootView == null) {
+            return;
+        }
+
+        rootView.post(() -> {
+            if (revealRadius <= 0 || revealCenterX <= 0 || revealCenterY <= 0) {
+                rootView.setVisibility(View.VISIBLE);
+                return;
+            }
+
+            int[] rootLocation = new int[2];
+            rootView.getLocationOnScreen(rootLocation);
+            int centerX = revealCenterX - rootLocation[0];
+            int centerY = revealCenterY - rootLocation[1];
+            if (centerX < 0 || centerY < 0 || centerX > rootView.getWidth() || centerY > rootView.getHeight()) {
+                centerX = rootView.getWidth() / 2;
+                centerY = rootView.getHeight() / 2;
+            }
+
+            float endRadius = (float) Math.hypot(
+                    Math.max(centerX, rootView.getWidth() - centerX),
+                    Math.max(centerY, rootView.getHeight() - centerY));
+            Animator reveal = ViewAnimationUtils.createCircularReveal(
+                    rootView,
+                    centerX,
+                    centerY,
+                    Math.max(1, revealRadius),
+                    endRadius);
+            reveal.setDuration(430);
+            reveal.setInterpolator(new AccelerateDecelerateInterpolator());
+            rootView.setVisibility(View.VISIBLE);
+            reveal.start();
+        });
     }
 
     private LinearLayout CreateProgressPanel() {

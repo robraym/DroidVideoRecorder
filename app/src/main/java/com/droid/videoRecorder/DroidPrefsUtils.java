@@ -18,6 +18,7 @@ public class DroidPrefsUtils {
     public static final int LOCAL_GRAVACAO_RECORDER = 0;
     public static final int LOCAL_GRAVACAO_CARTAO_SD = 1;
     public static final int LOCAL_GRAVACAO_CAMERA = 2;
+    private static final String PREF_CONFIGURACAO_INICIAL_EXIBIDA = "spf_configuracaoInicialExibida";
     private static final String PREF_ULTIMA_CAMERA = "spf_ultimaCamera";
     private static final String PREF_TAMANHO_BOLINHA = "spf_tamanhoBolinha";
     private static final String CAMERA_FRONTAL = "front";
@@ -38,7 +39,7 @@ public class DroidPrefsUtils {
         boolean spf = false;
         try {
             SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
-            spf = sp.getBoolean("spf_exibeAoIniciar", true);
+            spf = !sp.getBoolean(PREF_CONFIGURACAO_INICIAL_EXIBIDA, false);
         } catch (Exception ex) {
             Log.d("DroidVideo", ex.getMessage());
         }
@@ -69,6 +70,15 @@ public class DroidPrefsUtils {
         }
         return spf;
 
+    }
+
+    public static void marcaTelaInicialExibida(final Context context) {
+        try {
+            SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
+            sp.edit().putBoolean(PREF_CONFIGURACAO_INICIAL_EXIBIDA, true).apply();
+        } catch (Exception ex) {
+            Log.d("DroidVideo", ex.getMessage());
+        }
     }
 
     public static boolean salvaSelfiesComoVisualizadas(final Context context) {

@@ -48,6 +48,7 @@ public class DroidConfigurationActivity extends Activity {
     private boolean overlayPermissionScreenVisited;
     private boolean permissionFlowActive;
     private boolean runtimePermissionRequested;
+    private boolean settingsScreenVisible;
     private static final int COLOR_BACKGROUND = Color.rgb(0, 0, 0);
     private static final int COLOR_GROUP = Color.rgb(28, 29, 33);
     private static final int COLOR_PRIMARY_TEXT = Color.rgb(248, 248, 250);
@@ -76,7 +77,9 @@ public class DroidConfigurationActivity extends Activity {
         boolean exibeTelaInicial = ExibeTelaInicial();
         boolean chamadaPeloServico = ChamadaPeloServico();
 
-        if (exibeTelaInicial || chamadaPeloServico) {
+        settingsScreenVisible = exibeTelaInicial || chamadaPeloServico;
+
+        if (settingsScreenVisible) {
             setTheme(R.style.DefaultTheme);
         } else {
             setTheme(R.style.TranslucentTheme);
@@ -84,8 +87,11 @@ public class DroidConfigurationActivity extends Activity {
         super.onCreate(savedInstanceState);
         canFinish = true;
 
-        if (exibeTelaInicial || chamadaPeloServico) {
+        if (settingsScreenVisible) {
             BuildSettingsScreen();
+            if (exibeTelaInicial && !chamadaPeloServico) {
+                DroidPrefsUtils.marcaTelaInicialExibida(context);
+            }
         } else if (HasRuntimePermissions() && HasOverlayPermission()) {
             finish();
         }
@@ -490,7 +496,7 @@ public class DroidConfigurationActivity extends Activity {
                 return;
             }
 
-            if (!ExibeTelaInicial() && !ChamadaPeloServico()
+            if (!settingsScreenVisible && !ChamadaPeloServico()
                     && HasRuntimePermissions() && HasOverlayPermission()) {
                 finish();
             } else {
@@ -574,7 +580,7 @@ public class DroidConfigurationActivity extends Activity {
         overlayPermissionRequested = false;
         startupServiceRequested = false;
         permissionFlowActive = false;
-        if (!ExibeTelaInicial() && !ChamadaPeloServico()) {
+        if (!settingsScreenVisible && !ChamadaPeloServico()) {
             finish();
         }
     }

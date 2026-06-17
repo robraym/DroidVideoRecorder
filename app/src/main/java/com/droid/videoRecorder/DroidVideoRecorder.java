@@ -25,6 +25,7 @@ import androidx.media3.transformer.EditedMediaItem;
 import androidx.media3.transformer.Effects;
 import androidx.media3.transformer.ExportException;
 import androidx.media3.transformer.ExportResult;
+import androidx.media3.transformer.ProgressHolder;
 import androidx.media3.transformer.Transformer;
 import java.io.File;
 import java.io.FileInputStream;
@@ -62,6 +63,9 @@ public class DroidVideoRecorder {
     private static final ArrayDeque<PendingMirroredSelfie> PENDING_MIRRORED_SELFIES = new ArrayDeque<>();
     private static Transformer activeMirrorTransformer;
     private static PendingMirroredSelfie activeMirroredSelfie;
+    private static boolean pendingVideoProcessing;
+    private static boolean copyingMirroredSelfie;
+    private static final ProgressHolder MIRROR_PROGRESS_HOLDER = new ProgressHolder();
 
     public interface RecordedVideoListener {
         void OnRecordedVideoReady(RecordedVideo video);
@@ -308,6 +312,8 @@ public class DroidVideoRecorder {
             return;
         }
 
+        pendingVideoProcessing = true;
+        copyingMirroredSelfie = false;
         PendingMirroredSelfie selfie = new PendingMirroredSelfie(videoUri, legacyVideoPath, displayName, listener);
         MIRROR_HANDLER.post(() -> {
             PENDING_MIRRORED_SELFIES.offer(selfie);
@@ -368,6 +374,7 @@ public class DroidVideoRecorder {
             return;
         }
 
+        copyingMirroredSelfie = true;
         MIRROR_COPY_EXECUTOR.execute(() -> {
             RecordedVideo recordedVideo = null;
             try {
@@ -461,9 +468,39 @@ public class DroidVideoRecorder {
         if (activeMirroredSelfie != null && activeMirroredSelfie.transformedFile != null) {
             activeMirroredSelfie.transformedFile.delete();
         }
+        copyingMirroredSelfie = false;
         activeMirrorTransformer = null;
         activeMirroredSelfie = null;
         StartNextMirroredSelfie();
+        if (activeMirrorTransformer == null && activeMirroredSelfie == null && PENDING_MIRRORED_SELFIES.isEmpty()) {
+            pendingVideoProcessing = false;
+        }
+    }
+
+    public static boolean HasPendingVideoProcessing() {
+        return pendingVideoProcessing;
+    }
+
+    public static int GetVideoProcessingProgressPercent() {
+        if (!pendingVideoProcessing) {
+            return -1;
+        }
+        if (copyingMirroredSelfie) {
+            return 96;
+        }
+        if (activeMirrorTransformer == null) {
+            return -1;
+        }
+
+        try {
+            int progressState = activeMirrorTransformer.getProgress(MIRROR_PROGRESS_HOLDER);
+            if (progressState == Transformer.PROGRESS_STATE_AVAILABLE) {
+                return Math.max(0, Math.min(99, MIRROR_PROGRESS_HOLDER.progress));
+            }
+        } catch (IllegalStateException ex) {
+            LogException("MirrorSelfie", ex);
+        }
+        return -1;
     }
 
     private static void NotifyRecordedVideo(PendingMirroredSelfie selfie) {

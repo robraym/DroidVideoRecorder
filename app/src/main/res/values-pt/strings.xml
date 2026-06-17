@@ -51,7 +51,9 @@
     <string name="notification_ready_to_record_with_camera">Pronto para gravar na %1$s</string>
     <string name="notification_recording_with_camera">Gravando com a %1$s</string>
     <string name="notification_viewing_with_camera">Visualizando a %1$s</string>
+    <string name="notification_preparing_video">Preparando vídeo...</string>
     <string name="notification_tap_to_exit">Toque na bolinha para sair</string>
+    <string name="video_processing_bubble">Aguarde</string>
     <string name="camera_label_front">Frontal</string>
     <string name="camera_label_back">Traseira</string>
     <string name="camera_indicator_front">F</string>

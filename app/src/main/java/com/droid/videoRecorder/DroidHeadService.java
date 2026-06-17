@@ -20,6 +20,7 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.PixelFormat;
 import android.graphics.RectF;
+import android.graphics.drawable.Drawable;
 import android.graphics.Shader;
 import android.graphics.SurfaceTexture;
 import android.graphics.Typeface;
@@ -92,6 +93,10 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     private PalmGestureDetector palmGestureDetector;
     private boolean palmCountdownActive;
     private int palmCountdownValue;
+    private boolean videoProcessingActive;
+    private int videoProcessingDots;
+    private long videoProcessingStartedAtMs;
+    private ProcessingDrawable processingDrawable;
     private SensorManager sensorManager;
     private Sensor gyroscopeSensor;
     private Notification.Builder notificationBuilder;
@@ -107,6 +112,26 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     private ArrayList<DroidConstants.EnumStateRecVideo> stateRecVideoVIEW;
     private ArrayList<DroidConstants.EnumStateRecVideo> stateRecVideoREC;
     private ArrayList<DroidConstants.EnumStateRecVideo> stateRecVideoCLOSE;
+
+    private final Runnable videoProcessingPulse = new Runnable() {
+        @Override
+        public void run() {
+            if (!videoProcessingActive) {
+                return;
+            }
+
+            videoProcessingDots = (videoProcessingDots % 3) + 1;
+            StringBuilder text = new StringBuilder(getString(R.string.video_processing_bubble));
+            for (int i = 0; i < videoProcessingDots; i++) {
+                text.append(".");
+            }
+            txtHead.setText(text.toString());
+            if (processingDrawable != null) {
+                processingDrawable.invalidateSelf();
+            }
+            mainHandler.postDelayed(this, 700);
+        }
+    };
 
     OrientationEventListener myOrientationEventListener;
 
@@ -776,11 +801,18 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     private void ShowStopRecord(boolean record) {
         boolean shouldReviewVideo = record && DroidPrefsUtils.revisarVideoAposGravar(context);
         DroidVideoRecorder.RecordedVideo recordedVideo = DroidVideoRecorder.OnStopRecording(record,
-                shouldReviewVideo ? video -> mainHandler.post(() -> OpenVideoReview(video)) : null);
+                shouldReviewVideo ? video -> mainHandler.post(() -> {
+                    HideVideoProcessing();
+                    OpenVideoReview(video);
+                }) : null);
         if (record && asyncTask != null) {
             asyncTask.cancel(true);
         }
-        ShowStop();
+        if (shouldReviewVideo && recordedVideo == null && DroidVideoRecorder.HasPendingVideoProcessing()) {
+            ShowVideoProcessing();
+        } else {
+            ShowStop();
+        }
         if (shouldReviewVideo && recordedVideo != null) {
             OpenVideoReview(recordedVideo);
         }
@@ -792,7 +824,18 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             return;
         }
 
-        Intent intent = DroidVideoReviewActivity.CreateIntent(context, video);
+        int centerX = 0;
+        int centerY = 0;
+        int radius = dp(chatHeadSizeDp / 2);
+        if (chatHead != null) {
+            int[] location = new int[2];
+            chatHead.getLocationOnScreen(location);
+            centerX = location[0] + chatHead.getWidth() / 2;
+            centerY = location[1] + chatHead.getHeight() / 2;
+            radius = Math.max(1, chatHead.getWidth() / 2);
+        }
+
+        Intent intent = DroidVideoReviewActivity.CreateIntent(context, video, centerX, centerY, radius);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         startActivity(intent);
     }
@@ -806,10 +849,64 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     }
 
     private void ShowStop() {
+        HideVideoProcessing();
         SetPreviewFullScreen(false);
         DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.STOP;
         UpdateNotification(GetReadyNotificationText());
         ShowReadyPreview();
+    }
+
+    private void ShowVideoProcessing() {
+        videoProcessingActive = true;
+        videoProcessingDots = 0;
+        videoProcessingStartedAtMs = SystemClock.elapsedRealtime();
+        CancelPalmRecordingCountdown();
+        PausePalmGestureDetection();
+        pendingReadyPreview = false;
+        SetPreviewFullScreen(false);
+        DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.STOP;
+        UpdateNotification(getString(R.string.notification_preparing_video));
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            if (readyPreviewView != null) {
+                readyPreviewView.setVisibility(View.INVISIBLE);
+            }
+            chatHead.setImageDrawable(null);
+            processingDrawable = new ProcessingDrawable();
+            chatHead.setBackground(processingDrawable);
+            processingDrawable.Start();
+        } else {
+            ShowChatHeadIcon(R.mipmap.viewrec);
+        }
+
+        HideRecordingBadge();
+        txtHead.setVisibility(View.INVISIBLE);
+        mainHandler.removeCallbacks(videoProcessingPulse);
+        mainHandler.post(videoProcessingPulse);
+    }
+
+    private void HideVideoProcessing() {
+        if (!videoProcessingActive) {
+            return;
+        }
+        videoProcessingActive = false;
+        mainHandler.removeCallbacks(videoProcessingPulse);
+        if (chatHead != null) {
+            chatHead.animate().cancel();
+            chatHead.setScaleX(1f);
+            chatHead.setScaleY(1f);
+            chatHead.setAlpha(1f);
+            if (processingDrawable != null) {
+                processingDrawable.Stop();
+                processingDrawable = null;
+            }
+        }
+        if (txtHead != null) {
+            txtHead.animate().cancel();
+            txtHead.setAlpha(1f);
+            txtHead.setSingleLine(false);
+            txtHead.setVisibility(View.INVISIBLE);
+        }
     }
 
     private void SetPreviewFullScreen(boolean fullScreen) {
@@ -917,6 +1014,189 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         return border;
     }
 
+    private float GetVideoProcessingProgressFraction() {
+        int progressPercent = DroidVideoRecorder.GetVideoProcessingProgressPercent();
+        if (progressPercent >= 0) {
+            return Math.max(0.02f, Math.min(0.98f, progressPercent / 100f));
+        }
+
+        long elapsedMs = Math.max(0, SystemClock.elapsedRealtime() - videoProcessingStartedAtMs);
+        float estimatedProgress = 0.10f + elapsedMs / 9000f * 0.76f;
+        return Math.max(0.02f, Math.min(0.86f, estimatedProgress));
+    }
+
+    private class ProcessingDrawable extends Drawable {
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Path gearPath = new Path();
+        private final RectF progressBounds = new RectF();
+        private final Runnable frame = new Runnable() {
+            @Override
+            public void run() {
+                if (!videoProcessingActive) {
+                    return;
+                }
+                rotation = (rotation + 4f) % 360f;
+                pulse = (pulse + 0.022f) % 1f;
+                invalidateSelf();
+                mainHandler.postDelayed(this, 48);
+            }
+        };
+        private float rotation;
+        private float pulse;
+
+        void Start() {
+            mainHandler.removeCallbacks(frame);
+            mainHandler.post(frame);
+        }
+
+        void Stop() {
+            mainHandler.removeCallbacks(frame);
+        }
+
+        @Override
+        public void draw(Canvas canvas) {
+            float width = getBounds().width();
+            float height = getBounds().height();
+            float size = Math.min(width, height);
+            float centerX = getBounds().left + width / 2f;
+            float centerY = getBounds().top + height / 2f;
+            float radius = size / 2f - dp(BubbleDp(5));
+            float progress = GetVideoProcessingProgressFraction();
+            float pulseWave = (float) Math.sin(pulse * Math.PI * 2f);
+
+            DrawProcessingCard(canvas, centerX, centerY, radius, pulseWave);
+            DrawProgressRing(canvas, centerX, centerY, radius, progress);
+            DrawProcessingGear(canvas, centerX, centerY - dp(BubbleDp(18)), pulseWave);
+            DrawProcessingText(canvas, centerX, centerY, progress);
+        }
+
+        private void DrawProcessingCard(Canvas canvas, float centerX, float centerY, float radius, float pulseWave) {
+            paint.reset();
+            paint.setAntiAlias(true);
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(Color.argb(218, 30, 33, 39));
+            paint.setShadowLayer(dp(11), 0, dp(5), Color.argb(100, 0, 0, 0));
+            canvas.drawCircle(centerX, centerY, radius, paint);
+
+            paint.clearShadowLayer();
+            paint.setShader(new LinearGradient(
+                    centerX,
+                    centerY - radius,
+                    centerX,
+                    centerY + radius,
+                    new int[]{
+                            Color.argb(62, 255, 255, 255),
+                            Color.argb(10, 255, 255, 255),
+                            Color.argb(56, 0, 0, 0)
+                    },
+                    new float[]{0f, 0.42f, 1f},
+                    Shader.TileMode.CLAMP));
+            canvas.drawCircle(centerX, centerY, radius, paint);
+            paint.setShader(null);
+
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(dp(BubbleDp(1)));
+            paint.setColor(Color.argb(95 + Math.round(20 * Math.max(0f, pulseWave)), 245, 248, 252));
+            canvas.drawCircle(centerX, centerY, radius - dp(BubbleDp(1)), paint);
+        }
+
+        private void DrawProgressRing(Canvas canvas, float centerX, float centerY, float radius, float progress) {
+            float progressRadius = radius * 0.84f;
+            progressBounds.set(centerX - progressRadius, centerY - progressRadius,
+                    centerX + progressRadius, centerY + progressRadius);
+
+            paint.setShader(null);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeCap(Paint.Cap.ROUND);
+            paint.setStrokeWidth(dp(BubbleDp(3)));
+            paint.setColor(Color.argb(82, 245, 248, 252));
+            canvas.drawCircle(centerX, centerY, progressRadius, paint);
+
+            paint.setStrokeWidth(dp(BubbleDp(4)));
+            paint.setColor(Color.argb(225, 132, 188, 255));
+            canvas.drawArc(progressBounds, -90f, 360f * progress, false, paint);
+        }
+
+        private void DrawProcessingGear(Canvas canvas, float centerX, float centerY, float pulseWave) {
+            float outerRadius = dp(BubbleDp(13));
+            float innerRadius = dp(BubbleDp(10));
+
+            canvas.save();
+            canvas.rotate(rotation * 0.25f, centerX, centerY);
+            gearPath.reset();
+            for (int i = 0; i < 24; i++) {
+                double angle = -Math.PI / 2d + i * Math.PI * 2d / 24d;
+                float radius = i % 3 == 1 ? innerRadius : outerRadius;
+                float x = centerX + (float) Math.cos(angle) * radius;
+                float y = centerY + (float) Math.sin(angle) * radius;
+                if (i == 0) {
+                    gearPath.moveTo(x, y);
+                } else {
+                    gearPath.lineTo(x, y);
+                }
+            }
+            gearPath.close();
+
+            paint.reset();
+            paint.setAntiAlias(true);
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(Color.argb(220, 224, 231, 239));
+            canvas.drawPath(gearPath, paint);
+
+            paint.setColor(Color.rgb(45, 50, 58));
+            canvas.drawCircle(centerX, centerY, dp(BubbleDp(5)), paint);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(dp(BubbleDp(1)));
+            paint.setColor(Color.argb(95 + Math.round(50 * Math.max(0f, pulseWave)), 132, 188, 255));
+            canvas.drawCircle(centerX, centerY, dp(BubbleDp(6)), paint);
+            canvas.restore();
+        }
+
+        private void DrawProcessingText(Canvas canvas, float centerX, float centerY, float progress) {
+            paint.reset();
+            paint.setAntiAlias(true);
+            paint.setStyle(Paint.Style.FILL);
+            paint.setTextAlign(Paint.Align.CENTER);
+            paint.setTypeface(Typeface.DEFAULT_BOLD);
+            paint.setShadowLayer(dp(BubbleDp(3)), 0, dp(BubbleDp(1)), Color.argb(170, 0, 0, 0));
+
+            StringBuilder label = new StringBuilder(getString(R.string.video_processing_bubble));
+            for (int i = 0; i < videoProcessingDots; i++) {
+                label.append(".");
+            }
+
+            paint.setTextSize(BubbleTextSize(8.2f) * getResources().getDisplayMetrics().scaledDensity);
+            paint.setColor(Color.WHITE);
+            Paint.FontMetrics labelMetrics = paint.getFontMetrics();
+            float labelCenterY = centerY + dp(BubbleDp(7));
+            float labelBaseline = labelCenterY - (labelMetrics.ascent + labelMetrics.descent) / 2f;
+            canvas.drawText(label.toString(), centerX, labelBaseline, paint);
+
+            paint.setTextSize(BubbleTextSize(6.8f) * getResources().getDisplayMetrics().scaledDensity);
+            paint.setColor(Color.argb(214, 224, 231, 239));
+            Paint.FontMetrics percentMetrics = paint.getFontMetrics();
+            float percentCenterY = centerY + dp(BubbleDp(23));
+            float percentBaseline = percentCenterY - (percentMetrics.ascent + percentMetrics.descent) / 2f;
+            canvas.drawText(Math.round(progress * 100f) + "%", centerX, percentBaseline, paint);
+            paint.clearShadowLayer();
+        }
+
+        @Override
+        public void setAlpha(int alpha) {
+            paint.setAlpha(alpha);
+        }
+
+        @Override
+        public void setColorFilter(android.graphics.ColorFilter colorFilter) {
+            paint.setColorFilter(colorFilter);
+        }
+
+        @Override
+        public int getOpacity() {
+            return PixelFormat.TRANSLUCENT;
+        }
+    }
+
     private void ResizeReadyBubble(int newSizeDp, boolean persist) {
         if (DroidVideoRecorder.StateRecVideo != DroidConstants.EnumStateRecVideo.STOP) {
             return;
@@ -974,7 +1254,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     };
 
     private void StartPalmGestureDetection() {
-        if (!palmCountdownActive && palmGestureDetector != null) {
+        if (!videoProcessingActive && !palmCountdownActive && palmGestureDetector != null) {
             palmGestureDetector.Start();
         }
     }
@@ -987,6 +1267,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
 
     private void StartPalmRecordingCountdown() {
         if (palmCountdownActive
+                || videoProcessingActive
                 || trashDragActive
                 || DroidVideoRecorder.StateRecVideo != DroidConstants.EnumStateRecVideo.STOP) {
             return;
@@ -1469,6 +1750,9 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     }
 
     private boolean Permite(DroidConstants.EnumStateRecVideo stateRecVideo) {
+        if (videoProcessingActive) {
+            return false;
+        }
 
         if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.STOP) {
             return stateRecVideoSTOP.contains(stateRecVideo);
@@ -2000,6 +2284,10 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
 
         @Override
         public boolean onTouch(View v, MotionEvent event) {
+            if (videoProcessingActive) {
+                return true;
+            }
+
             int action = event.getActionMasked();
             if (action == MotionEvent.ACTION_POINTER_DOWN && event.getPointerCount() >= 2) {
                 multiTouchGesture = true;
