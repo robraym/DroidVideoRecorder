@@ -10,6 +10,8 @@
     <string name="spf_salvar_selfies_como_visualizadas_resumo">Salva as selfies e os vídeos selfie conforme aparecem na pré-visualização sem invertê-los.</string>
     <string name="spf_revisar_video_apos_gravar">Revisão do vídeo</string>
     <string name="spf_revisar_video_apos_gravar_resumo">Mostre o vídeo após a gravação para reproduzir, compartilhar ou mover para a lixeira.</string>
+    <string name="spf_melhorar_video">Melhoria de vídeo</string>
+    <string name="spf_melhorar_video_resumo">Mostra a opção Melhorar na revisão para aplicar ajustes de imagem e desfoque suave.</string>
     <string name="revisao_video_titulo">Vídeo salvo</string>
     <string name="revisao_video_subtitulo">Confira sua gravação</string>
     <string name="revisao_video_play">Reproduzir</string>
@@ -17,6 +19,13 @@
     <string name="revisao_video_apagar">Excluir</string>
     <string name="revisao_video_mover_lixeira">Mover</string>
     <string name="revisao_video_compartilhar">Compartilhar</string>
+    <string name="revisao_video_melhorar">Melhorar</string>
+    <string name="revisao_video_restaurar">Restaurar</string>
+    <string name="revisao_video_melhorando">Melhorando vídeo...</string>
+    <string name="revisao_video_melhorando_resumo">Aplicando ajustes e desfoque suave.</string>
+    <string name="revisao_video_melhorado">Vídeo melhorado</string>
+    <string name="revisao_video_restaurado">Vídeo original restaurado</string>
+    <string name="revisao_video_melhorar_erro">Não foi possível melhorar este vídeo</string>
     <string name="revisao_video_fechar">Fechar</string>
     <string name="revisao_video_apagado">Vídeo excluído</string>
     <string name="revisao_video_movido_lixeira">Vídeo movido para a lixeira</string>

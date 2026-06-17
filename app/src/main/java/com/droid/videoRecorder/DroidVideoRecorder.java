@@ -17,8 +17,29 @@ import android.os.ParcelFileDescriptor;
 import android.provider.MediaStore;
 import android.view.Surface;
 import android.view.SurfaceHolder;
+import androidx.annotation.NonNull;
+import androidx.camera.core.CameraSelector;
+import androidx.camera.core.MirrorMode;
+import androidx.camera.core.Preview;
+import androidx.camera.lifecycle.ProcessCameraProvider;
+import androidx.camera.video.FallbackStrategy;
+import androidx.camera.video.MediaStoreOutputOptions;
+import androidx.camera.video.PendingRecording;
+import androidx.camera.video.Quality;
+import androidx.camera.video.QualitySelector;
+import androidx.camera.video.Recorder;
+import androidx.camera.video.Recording;
+import androidx.camera.video.VideoCapture;
+import androidx.camera.video.VideoRecordEvent;
+import androidx.lifecycle.Lifecycle;
+import androidx.lifecycle.LifecycleOwner;
+import androidx.lifecycle.LifecycleRegistry;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.util.UnstableApi;
+import androidx.media3.effect.Brightness;
+import androidx.media3.effect.Contrast;
+import androidx.media3.effect.GaussianBlur;
+import androidx.media3.effect.HslAdjustment;
 import androidx.media3.effect.ScaleAndRotateTransformation;
 import androidx.media3.transformer.Composition;
 import androidx.media3.transformer.EditedMediaItem;
@@ -35,12 +56,15 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayDeque;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import android.util.Log;
 
 @UnstableApi
@@ -63,12 +87,26 @@ public class DroidVideoRecorder {
     private static final ArrayDeque<PendingMirroredSelfie> PENDING_MIRRORED_SELFIES = new ArrayDeque<>();
     private static Transformer activeMirrorTransformer;
     private static PendingMirroredSelfie activeMirroredSelfie;
+    private static PendingVideoEnhancement activeVideoEnhancement;
     private static boolean pendingVideoProcessing;
     private static boolean copyingMirroredSelfie;
     private static final ProgressHolder MIRROR_PROGRESS_HOLDER = new ProgressHolder();
+    private static final ExecutorService CAMERAX_EXECUTOR = Executors.newSingleThreadExecutor();
+    private static VideoCapture<Recorder> activeCameraXVideoCapture;
+    private static Recording activeCameraXRecording;
+    private static RecordedVideo activeCameraXRecordedVideo;
+    private static CountDownLatch activeCameraXFinalizeLatch;
+    private static RecordedVideoListener activeCameraXRecordedListener;
+    private static DirectRecordingLifecycleOwner directRecordingLifecycleOwner;
+    private static ProcessCameraProvider cameraXProvider;
 
     public interface RecordedVideoListener {
         void OnRecordedVideoReady(RecordedVideo video);
+    }
+
+    public interface VideoEnhancementListener {
+        void OnVideoEnhanced(RecordedVideo video);
+        void OnVideoEnhancementFailed();
     }
 
     public static class RecordedVideo {
@@ -210,6 +248,13 @@ public class DroidVideoRecorder {
     private static String NameFileDateNow() {
         SimpleDateFormat simpleFormat = new SimpleDateFormat("yyyyMMdd_HHmmss");
         return "DVR_" + simpleFormat.format(new Date(System.currentTimeMillis())) + ".mp4";
+    }
+
+    public static boolean ShouldUseDirectSelfieRecording(Context context) {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                && context != null
+                && TypeViewCam == DroidConstants.EnumTypeViewCam.FacingFront
+                && DroidPrefsUtils.salvaSelfiesComoVisualizadas(context);
     }
 
     private static void SetOutputFile(MediaRecorder mediaRecorder) throws IOException {
@@ -398,40 +443,51 @@ public class DroidVideoRecorder {
     }
 
     private static Uri ReplaceMediaStoreVideo(PendingMirroredSelfie selfie) throws IOException {
+        return ReplaceMediaStoreVideo(selfie.videoUri, selfie.transformedFile, selfie.displayName, true);
+    }
+
+    private static Uri ReplaceMediaStoreVideo(Uri sourceUri, File transformedFile, String displayName,
+                                              boolean deleteSource) throws IOException {
         ContentValues values = new ContentValues();
-        values.put(MediaStore.Video.Media.DISPLAY_NAME, selfie.displayName);
+        values.put(MediaStore.Video.Media.DISPLAY_NAME, displayName != null ? displayName : NameFileDateNow());
         values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
         values.put(MediaStore.Video.Media.RELATIVE_PATH, GetMediaStoreRelativePath());
         values.put(MediaStore.Video.Media.IS_PENDING, 1);
 
-        Uri mirroredVideoUri = appContext.getContentResolver().insert(GetMediaStoreCollectionUri(), values);
-        if (mirroredVideoUri == null) {
-            throw new IOException("Nao foi possivel criar o video selfie espelhado");
+        Uri replacementVideoUri = appContext.getContentResolver().insert(GetMediaStoreCollectionUri(), values);
+        if (replacementVideoUri == null) {
+            throw new IOException("Nao foi possivel criar o video processado");
         }
 
         try {
-            try (InputStream input = new FileInputStream(selfie.transformedFile);
-                 OutputStream output = appContext.getContentResolver().openOutputStream(mirroredVideoUri, "w")) {
+            try (InputStream input = new FileInputStream(transformedFile);
+                 OutputStream output = appContext.getContentResolver().openOutputStream(replacementVideoUri, "w")) {
                 if (output == null) {
-                    throw new IOException("Nao foi possivel abrir o video selfie espelhado");
+                    throw new IOException("Nao foi possivel abrir o video processado");
                 }
                 Copy(input, output);
             }
-            PublishMediaStoreVideo(mirroredVideoUri);
-            appContext.getContentResolver().delete(selfie.videoUri, null, null);
-            return mirroredVideoUri;
+            PublishMediaStoreVideo(replacementVideoUri);
+            if (deleteSource && sourceUri != null) {
+                appContext.getContentResolver().delete(sourceUri, null, null);
+            }
+            return replacementVideoUri;
         } catch (Exception ex) {
-            appContext.getContentResolver().delete(mirroredVideoUri, null, null);
+            appContext.getContentResolver().delete(replacementVideoUri, null, null);
             throw ex;
         }
     }
 
     private static void ReplaceLegacyVideo(PendingMirroredSelfie selfie) throws IOException {
-        File original = new File(selfie.legacyVideoPath);
-        File replacement = new File(selfie.legacyVideoPath + ".mirror.tmp");
-        File backup = new File(selfie.legacyVideoPath + ".original.tmp");
+        ReplaceLegacyVideo(selfie.legacyVideoPath, selfie.transformedFile, ".mirror");
+    }
 
-        try (InputStream input = new FileInputStream(selfie.transformedFile);
+    private static void ReplaceLegacyVideo(String legacyVideoPath, File transformedFile, String suffix) throws IOException {
+        File original = new File(legacyVideoPath);
+        File replacement = new File(legacyVideoPath + suffix + ".tmp");
+        File backup = new File(legacyVideoPath + ".original.tmp");
+
+        try (InputStream input = new FileInputStream(transformedFile);
              OutputStream output = new FileOutputStream(replacement)) {
             Copy(input, output);
         }
@@ -448,6 +504,156 @@ public class DroidVideoRecorder {
 
         backup.delete();
         ScanLegacyVideo(original.getAbsolutePath());
+    }
+
+    public static boolean EnhanceVideo(Context context, RecordedVideo video, VideoEnhancementListener listener) {
+        if (context != null) {
+            SetContext(context);
+        }
+        if (appContext == null || video == null || !video.HasVideo()) {
+            return false;
+        }
+        if (activeMirrorTransformer != null || activeVideoEnhancement != null) {
+            return false;
+        }
+
+        MIRROR_HANDLER.post(() -> StartVideoEnhancement(video, listener));
+        return true;
+    }
+
+    private static void StartVideoEnhancement(RecordedVideo video, VideoEnhancementListener listener) {
+        if (activeMirrorTransformer != null || activeVideoEnhancement != null || appContext == null) {
+            NotifyVideoEnhancementFailed(listener);
+            return;
+        }
+
+        activeVideoEnhancement = new PendingVideoEnhancement(video, listener);
+        try {
+            activeVideoEnhancement.transformedFile = File.createTempFile(
+                    "DVR_enhanced_",
+                    ".mp4",
+                    appContext.getCacheDir());
+
+            Effects effects = new Effects(
+                    Collections.emptyList(),
+                    BuildVideoEnhancementEffects());
+            EditedMediaItem editedMediaItem = new EditedMediaItem.Builder(
+                    MediaItem.fromUri(activeVideoEnhancement.GetInputUri()))
+                    .setEffects(effects)
+                    .build();
+
+            activeMirrorTransformer = new Transformer.Builder(appContext)
+                    .addListener(new Transformer.Listener() {
+                        @Override
+                        public void onCompleted(Composition composition, ExportResult result) {
+                            ReplaceActiveEnhancedVideo();
+                        }
+
+                        @Override
+                        public void onError(Composition composition, ExportResult result, ExportException exception) {
+                            LogException("EnhanceVideo", exception);
+                            NotifyVideoEnhancementFailed(activeVideoEnhancement != null
+                                    ? activeVideoEnhancement.listener
+                                    : listener);
+                            FinishActiveVideoEnhancement();
+                        }
+                    })
+                    .build();
+            activeMirrorTransformer.start(editedMediaItem, activeVideoEnhancement.transformedFile.getAbsolutePath());
+        } catch (Exception ex) {
+            LogException("EnhanceVideo", ex);
+            NotifyVideoEnhancementFailed(listener);
+            FinishActiveVideoEnhancement();
+        }
+    }
+
+    private static List<androidx.media3.common.Effect> BuildVideoEnhancementEffects() {
+        return Arrays.asList(
+                new Contrast(0.08f),
+                new Brightness(0.03f),
+                new HslAdjustment.Builder()
+                        .adjustSaturation(6f)
+                        .adjustLightness(1f)
+                        .build(),
+                new GaussianBlur(3f));
+    }
+
+    private static void ReplaceActiveEnhancedVideo() {
+        PendingVideoEnhancement enhancement = activeVideoEnhancement;
+        if (enhancement == null || enhancement.transformedFile == null) {
+            FinishActiveVideoEnhancement();
+            return;
+        }
+
+        MIRROR_COPY_EXECUTOR.execute(() -> {
+            RecordedVideo enhancedVideo = null;
+            try {
+                if (enhancement.video.uri != null) {
+                    Uri enhancedUri = ReplaceMediaStoreVideo(
+                            enhancement.video.uri,
+                            enhancement.transformedFile,
+                            enhancement.video.displayName,
+                            false);
+                    enhancedVideo = new RecordedVideo(enhancedUri, null, enhancement.video.displayName);
+                } else {
+                    String enhancedPath = CreateEnhancedLegacyVideoCopy(enhancement.video, enhancement.transformedFile);
+                    enhancedVideo = new RecordedVideo(null, enhancedPath, enhancement.video.displayName);
+                }
+            } catch (Exception ex) {
+                LogException("EnhanceVideo", ex);
+            }
+
+            RecordedVideo finalEnhancedVideo = enhancedVideo;
+            MIRROR_HANDLER.post(() -> {
+                if (finalEnhancedVideo != null && finalEnhancedVideo.HasVideo() && enhancement.listener != null) {
+                    enhancement.listener.OnVideoEnhanced(finalEnhancedVideo);
+                } else {
+                    NotifyVideoEnhancementFailed(enhancement.listener);
+                }
+                FinishActiveVideoEnhancement();
+            });
+        });
+    }
+
+    private static String CreateEnhancedLegacyVideoCopy(RecordedVideo sourceVideo, File transformedFile) throws IOException {
+        File source = new File(sourceVideo.legacyPath);
+        File destination = CreateSiblingVideoFile(source, ".enhanced");
+        try (InputStream input = new FileInputStream(transformedFile);
+             OutputStream output = new FileOutputStream(destination)) {
+            Copy(input, output);
+        }
+        ScanLegacyVideo(destination.getAbsolutePath());
+        return destination.getAbsolutePath();
+    }
+
+    private static File CreateSiblingVideoFile(File source, String suffix) {
+        File parent = source.getParentFile();
+        String name = source.getName();
+        int extensionIndex = name.lastIndexOf('.');
+        String baseName = extensionIndex > 0 ? name.substring(0, extensionIndex) : name;
+        String extension = extensionIndex > 0 ? name.substring(extensionIndex) : ".mp4";
+        File destination = new File(parent, baseName + suffix + extension);
+        int copyIndex = 1;
+        while (destination.exists()) {
+            destination = new File(parent, baseName + suffix + "_" + copyIndex + extension);
+            copyIndex++;
+        }
+        return destination;
+    }
+
+    private static void NotifyVideoEnhancementFailed(VideoEnhancementListener listener) {
+        if (listener != null) {
+            listener.OnVideoEnhancementFailed();
+        }
+    }
+
+    private static void FinishActiveVideoEnhancement() {
+        if (activeVideoEnhancement != null && activeVideoEnhancement.transformedFile != null) {
+            activeVideoEnhancement.transformedFile.delete();
+        }
+        activeMirrorTransformer = null;
+        activeVideoEnhancement = null;
+        StartNextMirroredSelfie();
     }
 
     private static void Copy(InputStream input, OutputStream output) throws IOException {
@@ -479,6 +685,10 @@ public class DroidVideoRecorder {
 
     public static boolean HasPendingVideoProcessing() {
         return pendingVideoProcessing;
+    }
+
+    public static boolean HasPendingDirectVideoReview() {
+        return activeCameraXRecordedListener != null && activeCameraXFinalizeLatch != null;
     }
 
     public static int GetVideoProcessingProgressPercent() {
@@ -533,6 +743,21 @@ public class DroidVideoRecorder {
 
         Uri GetInputUri() {
             return videoUri != null ? videoUri : Uri.fromFile(new File(legacyVideoPath));
+        }
+    }
+
+    private static class PendingVideoEnhancement {
+        final RecordedVideo video;
+        final VideoEnhancementListener listener;
+        File transformedFile;
+
+        PendingVideoEnhancement(RecordedVideo video, VideoEnhancementListener listener) {
+            this.video = video;
+            this.listener = listener;
+        }
+
+        Uri GetInputUri() {
+            return video.uri != null ? video.uri : Uri.fromFile(new File(video.legacyPath));
         }
     }
 
@@ -661,6 +886,206 @@ public class DroidVideoRecorder {
         }
         return Math.max(currentPreviewWidth, currentPreviewHeight)
                 / (float) Math.min(currentPreviewWidth, currentPreviewHeight);
+    }
+
+    public static void ReleaseLegacyPreviewCamera() {
+        ResetRecord(false, null);
+    }
+
+    public static boolean OnStartDirectSelfiePreview(SurfaceTexture previewTexture,
+                                                     Runnable previewSizeReadyCallback) {
+        if (appContext == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || previewTexture == null) {
+            return false;
+        }
+
+        try {
+            StopActiveCameraXRecording(false, null);
+            ReleaseLegacyPreviewCamera();
+            StartCameraXSession(previewTexture, previewSizeReadyCallback);
+            return true;
+        } catch (Exception ex) {
+            LogException("CameraXPreview", ex);
+            StopCameraXSession();
+            return false;
+        }
+    }
+
+    public static boolean OnStartDirectSelfieRecording(SurfaceTexture previewTexture,
+                                                       Runnable previewSizeReadyCallback) {
+        if (appContext == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            return false;
+        }
+
+        try {
+            if (activeCameraXRecording != null) {
+                StopActiveCameraXRecording(false, null);
+            }
+            if (activeCameraXVideoCapture == null) {
+                ReleaseLegacyPreviewCamera();
+                StartCameraXSession(previewTexture, previewSizeReadyCallback);
+            }
+
+            String displayName = NameFileDateNow();
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Video.Media.DISPLAY_NAME, displayName);
+            values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
+            values.put(MediaStore.Video.Media.RELATIVE_PATH, GetMediaStoreRelativePath());
+
+            MediaStoreOutputOptions outputOptions = new MediaStoreOutputOptions.Builder(
+                    appContext.getContentResolver(),
+                    GetMediaStoreCollectionUri())
+                    .setContentValues(values)
+                    .build();
+
+            activeCameraXRecordedVideo = null;
+            activeCameraXFinalizeLatch = new CountDownLatch(1);
+            PendingRecording pendingRecording = activeCameraXVideoCapture.getOutput()
+                    .prepareRecording(appContext, outputOptions)
+                    .withAudioEnabled();
+            activeCameraXRecording = pendingRecording.start(
+                    CAMERAX_EXECUTOR,
+                    event -> HandleCameraXRecordEvent(event, displayName));
+            mediaRecorderStarted = true;
+            return true;
+        } catch (Exception ex) {
+            LogException("CameraXRecording", ex);
+            StopCameraXSession();
+            return false;
+        }
+    }
+
+    private static void StartCameraXSession(SurfaceTexture previewTexture,
+                                            Runnable previewSizeReadyCallback) throws Exception {
+        QualitySelector qualitySelector = QualitySelector.fromOrderedList(
+                Arrays.asList(Quality.UHD, Quality.FHD, Quality.HD, Quality.SD),
+                FallbackStrategy.lowerQualityOrHigherThan(Quality.SD));
+        Recorder recorder = new Recorder.Builder()
+                .setQualitySelector(qualitySelector)
+                .build();
+        activeCameraXVideoCapture = new VideoCapture.Builder<>(recorder)
+                .setMirrorMode(MirrorMode.MIRROR_MODE_ON_FRONT_ONLY)
+                .setTargetRotation(Surface.ROTATION_0)
+                .build();
+            Preview preview = new Preview.Builder()
+                    .setTargetRotation(Surface.ROTATION_0)
+                    .build();
+            if (previewTexture != null) {
+                preview.setSurfaceProvider(request -> {
+                    currentPreviewWidth = request.getResolution().getWidth();
+                    currentPreviewHeight = request.getResolution().getHeight();
+                    if (previewSizeReadyCallback != null) {
+                        MIRROR_HANDLER.post(previewSizeReadyCallback);
+                    }
+                    previewTexture.setDefaultBufferSize(
+                            currentPreviewWidth,
+                            currentPreviewHeight);
+                    Surface surface = new Surface(previewTexture);
+                    request.provideSurface(surface, CAMERAX_EXECUTOR, result -> surface.release());
+                });
+            }
+
+        if (directRecordingLifecycleOwner == null) {
+            directRecordingLifecycleOwner = new DirectRecordingLifecycleOwner();
+        }
+        directRecordingLifecycleOwner.Start();
+
+        ProcessCameraProvider provider = GetCameraXProvider();
+        provider.unbindAll();
+        provider.bindToLifecycle(
+                directRecordingLifecycleOwner,
+                CameraSelector.DEFAULT_FRONT_CAMERA,
+                preview,
+                activeCameraXVideoCapture);
+        cameraXProvider = provider;
+    }
+
+    private static ProcessCameraProvider GetCameraXProvider() throws Exception {
+        if (cameraXProvider != null) {
+            return cameraXProvider;
+        }
+
+        return ProcessCameraProvider.getInstance(appContext).get(5, TimeUnit.SECONDS);
+    }
+
+    private static void HandleCameraXRecordEvent(VideoRecordEvent event, String displayName) {
+        if (event instanceof VideoRecordEvent.Finalize) {
+            VideoRecordEvent.Finalize finalizeEvent = (VideoRecordEvent.Finalize) event;
+            Uri outputUri = finalizeEvent.getOutputResults().getOutputUri();
+            RecordedVideo recordedVideo = null;
+            if (outputUri != null && !Uri.EMPTY.equals(outputUri)) {
+                recordedVideo = new RecordedVideo(outputUri, null, displayName);
+                activeCameraXRecordedVideo = recordedVideo;
+            }
+            if (activeCameraXFinalizeLatch != null) {
+                activeCameraXFinalizeLatch.countDown();
+            }
+            if (activeCameraXRecordedListener != null && recordedVideo != null) {
+                NotifyRecordedVideo(activeCameraXRecordedListener, recordedVideo);
+            }
+            StopCameraXSession();
+        }
+    }
+
+    private static RecordedVideo StopActiveCameraXRecording(boolean record, RecordedVideoListener listener) {
+        if (activeCameraXRecording == null && activeCameraXFinalizeLatch == null) {
+            StopCameraXSession();
+            return null;
+        }
+
+        CountDownLatch finalizeLatch = activeCameraXFinalizeLatch;
+        try {
+            if (record) {
+                activeCameraXRecordedListener = listener;
+                if (activeCameraXRecording != null) {
+                    activeCameraXRecording.stop();
+                    activeCameraXRecording = null;
+                }
+                if (finalizeLatch != null) {
+                    finalizeLatch.await(1500, TimeUnit.MILLISECONDS);
+                }
+            } else {
+                activeCameraXRecordedListener = null;
+                if (activeCameraXRecording != null) {
+                    activeCameraXRecording.close();
+                    activeCameraXRecording = null;
+                }
+            }
+        } catch (Exception ex) {
+            LogException("CameraXRecording", ex);
+        }
+
+        RecordedVideo recordedVideo = record ? activeCameraXRecordedVideo : null;
+        if (listener != null && recordedVideo != null && activeCameraXRecordedListener != null) {
+            NotifyRecordedVideo(listener, recordedVideo);
+            activeCameraXRecordedListener = null;
+        }
+
+        if (!record || recordedVideo != null) {
+            StopCameraXSession();
+        }
+        return recordedVideo;
+    }
+
+    private static void StopCameraXSession() {
+        activeCameraXRecording = null;
+        activeCameraXVideoCapture = null;
+        activeCameraXFinalizeLatch = null;
+        activeCameraXRecordedVideo = null;
+        activeCameraXRecordedListener = null;
+        mediaRecorderStarted = false;
+
+        try {
+            if (cameraXProvider != null) {
+                cameraXProvider.unbindAll();
+            }
+        } catch (Exception ex) {
+            LogException("CameraXRecording", ex);
+        }
+
+        if (directRecordingLifecycleOwner != null) {
+            directRecordingLifecycleOwner.Stop();
+            directRecordingLifecycleOwner = null;
+        }
     }
 
     public static void OnInitRec (Configuration orient, int orientation, DroidConstants.EnumTypeViewCam typeViewCam)
@@ -835,6 +1260,13 @@ public class DroidVideoRecorder {
     }
 
     public static RecordedVideo OnStopRecording(boolean record, RecordedVideoListener listener) {
+        if (activeCameraXRecording != null) {
+            return StopActiveCameraXRecording(record, listener);
+        }
+        if (activeCameraXVideoCapture != null) {
+            StopCameraXSession();
+            return null;
+        }
 
         try {
             if (mServiceCamera != null) {
@@ -844,5 +1276,37 @@ public class DroidVideoRecorder {
             LogException("StopRecording", ex);
         }
         return ResetRecord(record, listener);
+    }
+
+    private static class DirectRecordingLifecycleOwner implements LifecycleOwner {
+        private final LifecycleRegistry lifecycleRegistry = new LifecycleRegistry(this);
+
+        void Start() {
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                SetState(Lifecycle.State.CREATED);
+                SetState(Lifecycle.State.STARTED);
+                SetState(Lifecycle.State.RESUMED);
+            } else {
+                MIRROR_HANDLER.post(this::Start);
+            }
+        }
+
+        void Stop() {
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                SetState(Lifecycle.State.DESTROYED);
+            } else {
+                MIRROR_HANDLER.post(this::Stop);
+            }
+        }
+
+        private void SetState(Lifecycle.State state) {
+            lifecycleRegistry.setCurrentState(state);
+        }
+
+        @NonNull
+        @Override
+        public Lifecycle getLifecycle() {
+            return lifecycleRegistry;
+        }
     }
 }

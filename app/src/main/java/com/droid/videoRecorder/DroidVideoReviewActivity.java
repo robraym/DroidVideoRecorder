@@ -20,6 +20,7 @@ import android.provider.MediaStore;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewAnimationUtils;
+import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.animation.AccelerateDecelerateInterpolator;
@@ -54,12 +55,22 @@ public class DroidVideoReviewActivity extends Activity {
     private Uri videoUri;
     private String videoPath;
     private String displayName;
+    private Uri originalVideoUri;
+    private String originalVideoPath;
+    private String originalDisplayName;
+    private Uri enhancedVideoUri;
+    private String enhancedVideoPath;
     private FrameLayout rootView;
     private FrameLayout videoContainer;
+    private FrameLayout enhancementOverlay;
     private PlayerView videoView;
     private ExoPlayer mediaPlayer;
     private ImageButton playButton;
     private TextView playLabel;
+    private TextView subtitleLabel;
+    private TextView closeButton;
+    private LinearLayout controlsPanel;
+    private View restoreControl;
     private SeekBar progressBar;
     private TextView currentTimeLabel;
     private TextView durationLabel;
@@ -67,6 +78,9 @@ public class DroidVideoReviewActivity extends Activity {
     private boolean userSeeking;
     private boolean playing;
     private boolean deleted;
+    private boolean enhancingVideo;
+    private int processingTitleRes = R.string.revisao_video_melhorando;
+    private int processingSummaryRes = R.string.revisao_video_melhorando_resumo;
     private int revealCenterX;
     private int revealCenterY;
     private int revealRadius;
@@ -171,6 +185,9 @@ public class DroidVideoReviewActivity extends Activity {
         videoUri = uriText != null ? Uri.parse(uriText) : null;
         videoPath = intent.getStringExtra(EXTRA_VIDEO_PATH);
         displayName = intent.getStringExtra(EXTRA_DISPLAY_NAME);
+        originalVideoUri = videoUri;
+        originalVideoPath = videoPath;
+        originalDisplayName = displayName;
         revealCenterX = intent.getIntExtra(EXTRA_REVEAL_CENTER_X, 0);
         revealCenterY = intent.getIntExtra(EXTRA_REVEAL_CENTER_Y, 0);
         revealRadius = intent.getIntExtra(EXTRA_REVEAL_RADIUS, 0);
@@ -210,18 +227,35 @@ public class DroidVideoReviewActivity extends Activity {
         title.setTextSize(24);
         header.addView(title);
 
-        TextView subtitle = new TextView(this);
-        subtitle.setText(getString(R.string.revisao_video_subtitulo));
-        subtitle.setTextColor(Color.rgb(190, 193, 201));
-        subtitle.setTextSize(14);
-        subtitle.setPadding(0, dp(4), 0, 0);
-        header.addView(subtitle);
+        subtitleLabel = new TextView(this);
+        subtitleLabel.setText(getString(R.string.revisao_video_subtitulo));
+        subtitleLabel.setTextColor(Color.rgb(190, 193, 201));
+        subtitleLabel.setTextSize(14);
+        subtitleLabel.setPadding(0, dp(4), 0, 0);
+        header.addView(subtitleLabel);
 
         FrameLayout.LayoutParams headerParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.TOP);
         rootView.addView(header, headerParams);
+
+        closeButton = new TextView(this);
+        closeButton.setText("X");
+        closeButton.setTextColor(Color.WHITE);
+        closeButton.setGravity(Gravity.CENTER);
+        closeButton.setTypeface(Typeface.DEFAULT_BOLD);
+        closeButton.setTextSize(16);
+        closeButton.setBackground(CreateRounded(Color.rgb(54, 56, 64), dp(21)));
+        closeButton.setOnClickListener(v -> {
+            if (!enhancingVideo) {
+                finish();
+            }
+        });
+        FrameLayout.LayoutParams closeParams = new FrameLayout.LayoutParams(dp(42), dp(42),
+                Gravity.TOP | Gravity.RIGHT);
+        closeParams.setMargins(0, dp(28), dp(18), 0);
+        rootView.addView(closeButton, closeParams);
 
         LinearLayout progressPanel = CreateProgressPanel();
         FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(
@@ -232,6 +266,7 @@ public class DroidVideoReviewActivity extends Activity {
         rootView.addView(progressPanel, progressParams);
 
         LinearLayout controls = new LinearLayout(this);
+        controlsPanel = controls;
         controls.setOrientation(LinearLayout.HORIZONTAL);
         controls.setGravity(Gravity.CENTER);
         controls.setPadding(dp(12), dp(10), dp(12), dp(10));
@@ -244,14 +279,22 @@ public class DroidVideoReviewActivity extends Activity {
                 getString(R.string.revisao_video_compartilhar),
                 Color.rgb(48, 118, 230),
                 v -> ShareVideo()), controlItemParams);
+        if (DroidPrefsUtils.melhorarVideo(this)) {
+            controls.addView(CreateControl(android.R.drawable.ic_menu_edit,
+                    getString(R.string.revisao_video_melhorar),
+                    Color.rgb(38, 115, 148),
+                    v -> EnhanceVideo()), controlItemParams);
+            restoreControl = CreateControl(android.R.drawable.ic_menu_revert,
+                    getString(R.string.revisao_video_restaurar),
+                    Color.rgb(86, 88, 96),
+                    v -> RestoreOriginalVideo());
+            restoreControl.setVisibility(View.GONE);
+            controls.addView(restoreControl, controlItemParams);
+        }
         controls.addView(CreateControl(android.R.drawable.ic_menu_delete,
                 getString(R.string.revisao_video_apagar),
                 Color.rgb(232, 65, 72),
                 v -> ShowDeleteConfirmation()), controlItemParams);
-        controls.addView(CreateControl(android.R.drawable.ic_menu_close_clear_cancel,
-                getString(R.string.revisao_video_fechar),
-                Color.rgb(76, 78, 86),
-                v -> finish()), controlItemParams);
 
         FrameLayout.LayoutParams controlsParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -406,7 +449,7 @@ public class DroidVideoReviewActivity extends Activity {
         TextView label = new TextView(this);
         label.setText(text);
         label.setTextColor(Color.rgb(232, 233, 238));
-        label.setTextSize(9);
+        label.setTextSize(8);
         label.setGravity(Gravity.CENTER);
         label.setSingleLine(true);
         label.setPadding(0, dp(6), 0, 0);
@@ -483,7 +526,7 @@ public class DroidVideoReviewActivity extends Activity {
     }
 
     private void TogglePlay() {
-        if (mediaPlayer == null || deleted) {
+        if (mediaPlayer == null || deleted || enhancingVideo) {
             return;
         }
 
@@ -579,6 +622,9 @@ public class DroidVideoReviewActivity extends Activity {
     }
 
     private void ShowDeleteConfirmation() {
+        if (enhancingVideo) {
+            return;
+        }
         if (deleted) {
             finish();
             return;
@@ -599,6 +645,9 @@ public class DroidVideoReviewActivity extends Activity {
     }
 
     private void MoveVideoToTrash() {
+        if (enhancingVideo) {
+            return;
+        }
         if (deleted) {
             finish();
             return;
@@ -678,6 +727,9 @@ public class DroidVideoReviewActivity extends Activity {
     }
 
     private void ShareVideo() {
+        if (enhancingVideo) {
+            return;
+        }
         Uri shareUri = GetShareUri();
         if (shareUri == null) {
             Toast.makeText(this, getString(R.string.revisao_video_erro), Toast.LENGTH_SHORT).show();
@@ -689,6 +741,172 @@ public class DroidVideoReviewActivity extends Activity {
         shareIntent.putExtra(Intent.EXTRA_STREAM, shareUri);
         shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         startActivity(Intent.createChooser(shareIntent, getString(R.string.revisao_video_compartilhar_com)));
+    }
+
+    private void EnhanceVideo() {
+        if (enhancingVideo || deleted) {
+            return;
+        }
+
+        DroidVideoRecorder.RecordedVideo video = new DroidVideoRecorder.RecordedVideo(
+                videoUri,
+                videoPath,
+                displayName);
+        if (!video.HasVideo()) {
+            Toast.makeText(this, getString(R.string.revisao_video_melhorar_erro), Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        processingTitleRes = R.string.revisao_video_melhorando;
+        processingSummaryRes = R.string.revisao_video_melhorando_resumo;
+        ReleasePlayer();
+        SetEnhancementState(true);
+        DroidVideoRecorder.VideoEnhancementListener listener = new DroidVideoRecorder.VideoEnhancementListener() {
+            @Override
+            public void OnVideoEnhanced(DroidVideoRecorder.RecordedVideo video) {
+                runOnUiThread(() -> {
+                    DeleteEnhancedVideoIfPossible();
+                    videoUri = video.uri;
+                    videoPath = video.legacyPath;
+                    displayName = video.displayName;
+                    enhancedVideoUri = video.uri;
+                    enhancedVideoPath = video.legacyPath;
+                    if (restoreControl != null) {
+                        restoreControl.setVisibility(View.VISIBLE);
+                    }
+                    SetEnhancementState(false);
+                    Toast.makeText(DroidVideoReviewActivity.this,
+                            getString(R.string.revisao_video_melhorado),
+                            Toast.LENGTH_SHORT).show();
+                    StartVideo();
+                });
+            }
+
+            @Override
+            public void OnVideoEnhancementFailed() {
+                runOnUiThread(() -> {
+                    SetEnhancementState(false);
+                    Toast.makeText(DroidVideoReviewActivity.this,
+                            getString(R.string.revisao_video_melhorar_erro),
+                            Toast.LENGTH_SHORT).show();
+                    StartVideo();
+                });
+            }
+        };
+        boolean started = DroidVideoRecorder.EnhanceVideo(this, video, listener);
+
+        if (!started) {
+            SetEnhancementState(false);
+            Toast.makeText(this, getString(R.string.revisao_video_melhorar_erro), Toast.LENGTH_SHORT).show();
+            StartVideo();
+        }
+    }
+
+    private void RestoreOriginalVideo() {
+        if (enhancingVideo || deleted || (originalVideoUri == null && originalVideoPath == null)) {
+            return;
+        }
+
+        ReleasePlayer();
+        DeleteEnhancedVideoIfPossible();
+        videoUri = originalVideoUri;
+        videoPath = originalVideoPath;
+        displayName = originalDisplayName;
+        enhancedVideoUri = null;
+        enhancedVideoPath = null;
+        if (restoreControl != null) {
+            restoreControl.setVisibility(View.GONE);
+        }
+        Toast.makeText(this, getString(R.string.revisao_video_restaurado), Toast.LENGTH_SHORT).show();
+        StartVideo();
+    }
+
+    private void DeleteEnhancedVideoIfPossible() {
+        try {
+            if (enhancedVideoUri != null) {
+                getContentResolver().delete(enhancedVideoUri, null, null);
+            } else if (enhancedVideoPath != null) {
+                new File(enhancedVideoPath).delete();
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void SetEnhancementState(boolean enabled) {
+        enhancingVideo = enabled;
+        if (subtitleLabel != null) {
+            subtitleLabel.setText(enabled
+                    ? getString(processingTitleRes)
+                    : getString(R.string.revisao_video_subtitulo));
+        }
+        SetControlsEnabled(controlsPanel, !enabled);
+        if (controlsPanel != null) {
+            controlsPanel.setAlpha(enabled ? 0.45f : 1f);
+        }
+        SetControlsEnabled(closeButton, !enabled);
+        if (closeButton != null) {
+            closeButton.setAlpha(enabled ? 0.45f : 1f);
+        }
+
+        if (enabled) {
+            ShowEnhancementOverlay();
+        } else if (enhancementOverlay != null) {
+            rootView.removeView(enhancementOverlay);
+            enhancementOverlay = null;
+        }
+    }
+
+    private void ShowEnhancementOverlay() {
+        if (rootView == null || enhancementOverlay != null) {
+            return;
+        }
+
+        enhancementOverlay = new FrameLayout(this);
+        enhancementOverlay.setBackgroundColor(Color.argb(90, 0, 0, 0));
+
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setGravity(Gravity.CENTER);
+        panel.setPadding(dp(22), dp(16), dp(22), dp(16));
+        panel.setBackground(CreateRounded(Color.rgb(34, 35, 39), dp(24)));
+
+        TextView title = new TextView(this);
+        title.setText(getString(processingTitleRes));
+        title.setTextColor(Color.WHITE);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTextSize(16);
+        title.setGravity(Gravity.CENTER);
+        panel.addView(title);
+
+        TextView summary = new TextView(this);
+        summary.setText(getString(processingSummaryRes));
+        summary.setTextColor(Color.rgb(190, 193, 201));
+        summary.setTextSize(12);
+        summary.setGravity(Gravity.CENTER);
+        summary.setPadding(0, dp(6), 0, 0);
+        panel.addView(summary);
+
+        FrameLayout.LayoutParams panelParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER);
+        rootView.addView(enhancementOverlay, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
+        enhancementOverlay.addView(panel, panelParams);
+    }
+
+    private void SetControlsEnabled(View view, boolean enabled) {
+        if (view == null) {
+            return;
+        }
+        view.setEnabled(enabled);
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                SetControlsEnabled(group.getChildAt(i), enabled);
+            }
+        }
     }
 
     private Uri GetShareUri() {

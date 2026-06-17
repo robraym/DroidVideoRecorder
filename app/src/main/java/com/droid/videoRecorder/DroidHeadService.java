@@ -773,20 +773,42 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         CancelPalmRecordingCountdown();
         PausePalmGestureDetection();
         HideCameraIndicator();
-        ShowRecordingPreview();
+        boolean directSelfieRecording = DroidVideoRecorder.ShouldUseDirectSelfieRecording(context);
+        ShowRecordingPreview(true);
         SetPreviewFullScreen(false);
-        DroidVideoRecorder.OnInitRec(getResources().getConfiguration(), orientationEvent, DroidVideoRecorder.TypeViewCam);
-        ApplyPreviewTransform();
         boolean recordingStarted;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
-                && readyPreviewView != null
-                && readyPreviewView.isAvailable()) {
-            recordingStarted = DroidVideoRecorder.OnStartRecording(
-                    readyPreviewView.getSurfaceTexture(),
-                    orientationEvent);
+
+        if (directSelfieRecording) {
+            SurfaceTexture previewTexture = Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
+                    && readyPreviewView != null
+                    && readyPreviewView.isAvailable()
+                    ? readyPreviewView.getSurfaceTexture()
+                    : null;
+            recordingStarted = DroidVideoRecorder.OnStartDirectSelfieRecording(
+                    previewTexture,
+                    () -> {
+                        SetPreviewBubble();
+                        mainHandler.postDelayed(this::ApplyPreviewTransform, 150);
+                    });
         } else {
-            recordingStarted = DroidVideoRecorder.OnStartRecording(mSurfaceView.getHolder(), orientationEvent);
+            recordingStarted = false;
         }
+
+        if (!recordingStarted) {
+            ShowRecordingPreview(true);
+            DroidVideoRecorder.OnInitRec(getResources().getConfiguration(), orientationEvent, DroidVideoRecorder.TypeViewCam);
+            ApplyPreviewTransform();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
+                    && readyPreviewView != null
+                    && readyPreviewView.isAvailable()) {
+                recordingStarted = DroidVideoRecorder.OnStartRecording(
+                        readyPreviewView.getSurfaceTexture(),
+                        orientationEvent);
+            } else {
+                recordingStarted = DroidVideoRecorder.OnStartRecording(mSurfaceView.getHolder(), orientationEvent);
+            }
+        }
+
         if (!recordingStarted) {
             ShowStopRecord(false);
             return;
@@ -808,7 +830,10 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         if (record && asyncTask != null) {
             asyncTask.cancel(true);
         }
-        if (shouldReviewVideo && recordedVideo == null && DroidVideoRecorder.HasPendingVideoProcessing()) {
+        if (shouldReviewVideo
+                && recordedVideo == null
+                && (DroidVideoRecorder.HasPendingVideoProcessing()
+                || DroidVideoRecorder.HasPendingDirectVideoReview())) {
             ShowVideoProcessing();
         } else {
             ShowStop();
@@ -949,6 +974,10 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     }
 
     private void ShowRecordingPreview() {
+        ShowRecordingPreview(true);
+    }
+
+    private void ShowRecordingPreview(boolean showPreview) {
         PausePalmGestureDetection();
         pendingReadyPreview = false;
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
@@ -958,7 +987,11 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
 
         chatHead.setImageDrawable(null);
         chatHead.setBackground(CreatePreviewBorder(Color.rgb(232, 65, 72)));
-        SetPreviewBubble();
+        if (showPreview) {
+            SetPreviewBubble();
+        } else if (readyPreviewView != null) {
+            readyPreviewView.setVisibility(View.INVISIBLE);
+        }
     }
 
     private void HideReadyPreview() {
@@ -980,9 +1013,9 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         readyPreviewParams.y = params.y;
         try {
             readyPreviewView.setAlpha(1f);
-            readyPreviewView.setVisibility(View.VISIBLE);
             windowManager.updateViewLayout(readyPreviewView, readyPreviewParams);
             ApplyPreviewTransform();
+            readyPreviewView.setVisibility(View.VISIBLE);
         } catch (Exception ex) {
             Log.d("DVR", ex.getMessage());
         }
@@ -1704,6 +1737,19 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         }
 
         pendingReadyPreview = false;
+        if (DroidVideoRecorder.ShouldUseDirectSelfieRecording(context)) {
+            readyPreviewView.setTransform(new Matrix());
+            boolean directPreviewStarted = DroidVideoRecorder.OnStartDirectSelfiePreview(
+                    readyPreviewView.getSurfaceTexture(),
+                    () -> {
+                        SetPreviewBubble();
+                        mainHandler.postDelayed(this::ApplyPreviewTransform, 150);
+                    });
+            if (directPreviewStarted) {
+                return;
+            }
+        }
+
         DroidVideoRecorder.OnInitRec(getResources().getConfiguration(), orientationEvent, pendingPreviewCam);
         ApplyPreviewTransform();
         DroidVideoRecorder.OnViewRec(readyPreviewView.getSurfaceTexture());

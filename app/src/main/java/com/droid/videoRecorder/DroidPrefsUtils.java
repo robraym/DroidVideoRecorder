@@ -21,6 +21,7 @@ public class DroidPrefsUtils {
     private static final String PREF_CONFIGURACAO_INICIAL_EXIBIDA = "spf_configuracaoInicialExibida";
     private static final String PREF_ULTIMA_CAMERA = "spf_ultimaCamera";
     private static final String PREF_TAMANHO_BOLINHA = "spf_tamanhoBolinha";
+    private static final String PREF_MELHORAR_VIDEO = "spf_melhorarVideoComIa";
     private static final String CAMERA_FRONTAL = "front";
     private static final String CAMERA_TRASEIRA = "back";
 
@@ -97,6 +98,17 @@ public class DroidPrefsUtils {
         try {
             SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
             spf = sp.getBoolean("spf_revisarVideoAposGravar", true);
+        } catch (Exception ex) {
+            Log.d("DroidVideo", ex.getMessage());
+        }
+        return spf;
+    }
+
+    public static boolean melhorarVideo(final Context context) {
+        boolean spf = false;
+        try {
+            SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
+            spf = sp.getBoolean(PREF_MELHORAR_VIDEO, false);
         } catch (Exception ex) {
             Log.d("DroidVideo", ex.getMessage());
         }

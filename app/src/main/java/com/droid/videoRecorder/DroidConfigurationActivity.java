@@ -178,7 +178,21 @@ public class DroidConfigurationActivity extends Activity {
                 "spf_salvarSelfiesComoVisualizadas",
                 true,
                 true,
-                null));
+                (buttonView, isChecked) -> BuildSettingsScreen()));
+
+        if (ShouldShowVideoEnhancement()) {
+            generalGroup.addView(CreateDivider());
+            generalGroup.addView(CreateSwitchRow(
+                    "M",
+                    COLOR_ICON_BLUE,
+                    getString(R.string.spf_melhorar_video),
+                    getString(R.string.spf_melhorar_video_resumo),
+                    "spf_melhorarVideoComIa",
+                    false,
+                    true,
+                    null));
+        }
+
         generalGroup.addView(CreateDivider());
 
         generalGroup.addView(CreateSwitchRow(
@@ -212,6 +226,12 @@ public class DroidConfigurationActivity extends Activity {
 
         setContentView(scrollView);
         RefreshStorageSummary();
+    }
+
+    private boolean ShouldShowVideoEnhancement() {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                && preferences.getBoolean("spf_salvarSelfiesComoVisualizadas", true)
+                && DroidPrefsUtils.obtemUltimaCamera(context) == DroidConstants.EnumTypeViewCam.FacingFront;
     }
 
     private View CreateSwitchRow(String iconText, int iconColor, String title, String summary,
