@@ -431,10 +431,36 @@ public class DroidVideoReviewActivity extends Activity {
             mediaPlayer.pause();
             playing = false;
         } else {
+            if (ShouldReplayFromBeginning()) {
+                mediaPlayer.seekTo(0);
+                if (progressBar != null) {
+                    progressBar.setProgress(0);
+                }
+                if (currentTimeLabel != null) {
+                    currentTimeLabel.setText(FormatTime(0));
+                }
+            }
             mediaPlayer.play();
             playing = true;
         }
         UpdatePlayState();
+    }
+
+    private boolean ShouldReplayFromBeginning() {
+        if (mediaPlayer == null) {
+            return false;
+        }
+
+        if (mediaPlayer.getPlaybackState() == Player.STATE_ENDED) {
+            return true;
+        }
+
+        int duration = GetSafeDuration();
+        if (duration <= 0) {
+            return false;
+        }
+
+        return mediaPlayer.getCurrentPosition() >= duration - 250;
     }
 
     private void UpdatePlayState() {

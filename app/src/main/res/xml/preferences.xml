@@ -22,7 +22,7 @@
             android:title="@string/spf_salvar_selfies_como_visualizadas"></SwitchPreference>
 
         <SwitchPreference
-            android:defaultValue="false"
+            android:defaultValue="true"
             android:key="spf_revisarVideoAposGravar"
             android:summary="@string/spf_revisar_video_apos_gravar_resumo"
             android:title="@string/spf_revisar_video_apos_gravar"></SwitchPreference>

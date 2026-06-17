@@ -86,7 +86,7 @@ public class DroidPrefsUtils {
         boolean spf = false;
         try {
             SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
-            spf = sp.getBoolean("spf_revisarVideoAposGravar", false);
+            spf = sp.getBoolean("spf_revisarVideoAposGravar", true);
         } catch (Exception ex) {
             Log.d("DroidVideo", ex.getMessage());
         }
@@ -177,12 +177,14 @@ public class DroidPrefsUtils {
     }
 
     public static DroidConstants.EnumTypeViewCam obtemUltimaCamera(final Context context) {
-        DroidConstants.EnumTypeViewCam typeViewCam = DroidConstants.EnumTypeViewCam.FacingBack;
+        DroidConstants.EnumTypeViewCam typeViewCam = DroidConstants.EnumTypeViewCam.FacingFront;
         try {
             SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
-            String camera = sp.getString(PREF_ULTIMA_CAMERA, CAMERA_TRASEIRA);
+            String camera = sp.getString(PREF_ULTIMA_CAMERA, CAMERA_FRONTAL);
             if (CAMERA_FRONTAL.equals(camera)) {
                 typeViewCam = DroidConstants.EnumTypeViewCam.FacingFront;
+            } else if (CAMERA_TRASEIRA.equals(camera)) {
+                typeViewCam = DroidConstants.EnumTypeViewCam.FacingBack;
             }
         } catch (Exception ex) {
             Log.d("DroidVideo", ex.getMessage());
