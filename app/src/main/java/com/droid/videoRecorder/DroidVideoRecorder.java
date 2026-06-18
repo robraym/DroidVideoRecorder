@@ -37,10 +37,6 @@ import androidx.lifecycle.LifecycleOwner;
 import androidx.lifecycle.LifecycleRegistry;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.util.UnstableApi;
-import androidx.media3.effect.Brightness;
-import androidx.media3.effect.Contrast;
-import androidx.media3.effect.GaussianBlur;
-import androidx.media3.effect.HslAdjustment;
 import androidx.media3.effect.ScaleAndRotateTransformation;
 import androidx.media3.transformer.Composition;
 import androidx.media3.transformer.EditedMediaItem;
@@ -514,20 +510,11 @@ public class DroidVideoRecorder {
         if (context != null) {
             SetContext(context);
         }
-        if (appContext == null || video == null || !video.HasVideo()
-                || !IsVideoEnhancementSupported()) {
-            return false;
-        }
-        if (activeMirrorTransformer != null || activeVideoEnhancement != null || activeAudioEnhancement) {
-            return false;
-        }
-
-        MIRROR_HANDLER.post(() -> StartVideoEnhancement(video, listener));
-        return true;
+        return false;
     }
 
     public static boolean IsVideoEnhancementSupported() {
-        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q;
+        return false;
     }
 
     public static boolean IsAudioNoiseReductionSupported() {
@@ -590,60 +577,7 @@ public class DroidVideoRecorder {
     }
 
     private static void StartVideoEnhancement(RecordedVideo video, VideoEnhancementListener listener) {
-        if (activeMirrorTransformer != null || activeVideoEnhancement != null || appContext == null) {
-            NotifyVideoEnhancementFailed(listener);
-            return;
-        }
-
-        activeVideoEnhancement = new PendingVideoEnhancement(video, listener);
-        try {
-            activeVideoEnhancement.transformedFile = File.createTempFile(
-                    "DVR_enhanced_",
-                    ".mp4",
-                    appContext.getCacheDir());
-
-            Effects effects = new Effects(
-                    Collections.emptyList(),
-                    BuildVideoEnhancementEffects());
-            EditedMediaItem editedMediaItem = new EditedMediaItem.Builder(
-                    MediaItem.fromUri(activeVideoEnhancement.GetInputUri()))
-                    .setEffects(effects)
-                    .build();
-
-            activeMirrorTransformer = new Transformer.Builder(appContext)
-                    .addListener(new Transformer.Listener() {
-                        @Override
-                        public void onCompleted(Composition composition, ExportResult result) {
-                            ReplaceActiveEnhancedVideo();
-                        }
-
-                        @Override
-                        public void onError(Composition composition, ExportResult result, ExportException exception) {
-                            LogException("EnhanceVideo", exception);
-                            NotifyVideoEnhancementFailed(activeVideoEnhancement != null
-                                    ? activeVideoEnhancement.listener
-                                    : listener);
-                            FinishActiveVideoEnhancement();
-                        }
-                    })
-                    .build();
-            activeMirrorTransformer.start(editedMediaItem, activeVideoEnhancement.transformedFile.getAbsolutePath());
-        } catch (Exception ex) {
-            LogException("EnhanceVideo", ex);
-            NotifyVideoEnhancementFailed(listener);
-            FinishActiveVideoEnhancement();
-        }
-    }
-
-    private static List<androidx.media3.common.Effect> BuildVideoEnhancementEffects() {
-        return Arrays.asList(
-                new Contrast(0.08f),
-                new Brightness(0.03f),
-                new HslAdjustment.Builder()
-                        .adjustSaturation(6f)
-                        .adjustLightness(1f)
-                        .build(),
-                new GaussianBlur(3f));
+        NotifyVideoEnhancementFailed(listener);
     }
 
     private static void ReplaceActiveEnhancedVideo() {

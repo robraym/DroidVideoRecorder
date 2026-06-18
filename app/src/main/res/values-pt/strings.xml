@@ -17,11 +17,11 @@
     <string name="revisao_video_apagar">Excluir</string>
     <string name="revisao_video_mover_lixeira">Mover</string>
     <string name="revisao_video_compartilhar">Compartilhar</string>
-    <string name="revisao_video_melhorar">Melhorar</string>
-    <string name="revisao_video_voz">Voz</string>
+    <string name="revisao_video_melhorar">IA Vídeo</string>
+    <string name="revisao_video_voz">IA Áudio</string>
     <string name="revisao_video_restaurar">Restaurar</string>
     <string name="revisao_video_melhorando">Melhorando vídeo...</string>
-    <string name="revisao_video_melhorando_resumo">Aplicando ajustes e desfoque suave.</string>
+    <string name="revisao_video_melhorando_resumo">Usando IA para destacar a pessoa e suavizar o fundo.</string>
     <string name="revisao_video_voz_processando">Limpando áudio...</string>
     <string name="revisao_video_voz_processando_resumo">Usando IA para reduzir ruído e destacar a voz.</string>
     <string name="revisao_video_progresso_ia">%1$d%% • %2$s</string>

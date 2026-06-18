@@ -8,7 +8,11 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentSender;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -26,6 +30,7 @@ import android.view.WindowManager;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
@@ -297,17 +302,11 @@ public class DroidVideoReviewActivity extends Activity {
                 getString(R.string.revisao_video_compartilhar),
                 Color.rgb(48, 118, 230),
                 v -> ShareVideo()), controlItemParams);
-        if (DroidVideoRecorder.IsVideoEnhancementSupported()) {
-            controls.addView(CreateControl(android.R.drawable.ic_menu_edit,
-                    getString(R.string.revisao_video_melhorar),
-                    Color.rgb(38, 115, 148),
-                    v -> EnhanceVideo()), controlItemParams);
-            if (DroidVideoRecorder.IsAudioNoiseReductionSupported()) {
-                controls.addView(CreateControl(android.R.drawable.ic_menu_manage,
-                        getString(R.string.revisao_video_voz),
-                        Color.rgb(112, 86, 190),
-                        v -> ReduceAudioNoise()), controlItemParams);
-            }
+        if (DroidVideoRecorder.IsAudioNoiseReductionSupported()) {
+            controls.addView(CreateControl(R.drawable.ic_ai_sparkles_bitmap,
+                    getString(R.string.revisao_video_voz),
+                    Color.rgb(96, 108, 205),
+                    v -> ReduceAudioNoise()), controlItemParams);
             restoreControl = CreateControl(android.R.drawable.ic_menu_revert,
                     getString(R.string.revisao_video_restaurar),
                     Color.rgb(86, 88, 96),
@@ -461,9 +460,18 @@ public class DroidVideoReviewActivity extends Activity {
     private ImageButton CreateIconButton(int icon, int color) {
         ImageButton button = new ImageButton(this);
         button.setImageResource(icon);
-        button.setColorFilter(Color.WHITE);
+        boolean aiIcon = icon == R.drawable.ic_ai_sparkles_bitmap;
+        if (!aiIcon) {
+            button.setColorFilter(Color.WHITE);
+        }
         button.setBackground(CreateRounded(color, dp(22)));
-        button.setPadding(dp(10), dp(10), dp(10), dp(10));
+        if (aiIcon) {
+            button.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            button.setPadding(dp(5), dp(5), dp(3), dp(5));
+        } else {
+            int padding = dp(10);
+            button.setPadding(padding, padding, padding, padding);
+        }
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(44), dp(44));
         button.setLayoutParams(params);
         return button;
@@ -796,7 +804,7 @@ public class DroidVideoReviewActivity extends Activity {
                 ? R.string.revisao_video_voz_processando_resumo
                 : R.string.revisao_video_melhorando_resumo;
         processingAudioMode = audioMode;
-        processingProgressPercent = audioMode ? 1 : -1;
+        processingProgressPercent = 1;
         processingEstimatedSeconds = -1;
         ReleasePlayer();
         SetEnhancementState(true);
@@ -930,13 +938,19 @@ public class DroidVideoReviewActivity extends Activity {
         }
 
         enhancementOverlay = new FrameLayout(this);
-        enhancementOverlay.setBackgroundColor(Color.argb(90, 0, 0, 0));
+        enhancementOverlay.setBackgroundColor(Color.argb(122, 0, 0, 0));
 
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setGravity(Gravity.CENTER);
-        panel.setPadding(dp(22), dp(16), dp(22), dp(16));
-        panel.setBackground(CreateRounded(Color.rgb(34, 35, 39), dp(24)));
+        panel.setPadding(dp(24), dp(22), dp(24), dp(22));
+        panel.setMinimumWidth(dp(236));
+        panel.setBackground(CreateRounded(Color.rgb(31, 32, 37), dp(26)));
+
+        ProcessingStarsView starsView = new ProcessingStarsView(this);
+        LinearLayout.LayoutParams starsParams = new LinearLayout.LayoutParams(dp(184), dp(104));
+        starsParams.setMargins(0, 0, 0, dp(10));
+        panel.addView(starsView, starsParams);
 
         TextView title = new TextView(this);
         processingTitleLabel = title;
@@ -982,7 +996,7 @@ public class DroidVideoReviewActivity extends Activity {
             return;
         }
 
-        if (!processingAudioMode || processingProgressPercent < 0) {
+        if (processingProgressPercent < 0) {
             processingProgressLabel.setText("");
             return;
         }
@@ -1002,6 +1016,82 @@ public class DroidVideoReviewActivity extends Activity {
             dots.append('.');
         }
         return baseTitle + dots;
+    }
+
+    private class ProcessingStarsView extends View {
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Path starPath = new Path();
+        private final long startedAtMs = System.currentTimeMillis();
+        private final float[] particleAngles = {-155f, -118f, -68f, -18f, 22f, 64f, 116f, 158f};
+        private final float[] particleDelays = {0f, .16f, .34f, .08f, .48f, .25f, .58f, .42f};
+        private final float[] particleSizes = {8f, 13f, 19f, 10f, 15f, 9f, 12f, 7f};
+
+        ProcessingStarsView(Context context) {
+            super(context);
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            float width = getWidth();
+            float height = getHeight();
+            float centerX = width / 2f;
+            float centerY = height / 2f;
+            float elapsed = (System.currentTimeMillis() - startedAtMs) / 1000f;
+
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(Color.argb(24, 128, 139, 224));
+            canvas.drawCircle(centerX, centerY, dp(19) + dp(3) * Pulse(elapsed, 0f), paint);
+
+            DrawSparkle(canvas, centerX, centerY, dp(18) + dp(3) * Pulse(elapsed, .2f), dp(8), 238);
+            for (int i = 0; i < particleAngles.length; i++) {
+                float cycle = ((elapsed * 0.72f) + particleDelays[i]) % 1f;
+                float eased = EaseOut(cycle);
+                float distance = dp(14) + eased * dp(58 + (i % 3) * 8);
+                double angle = Math.toRadians(particleAngles[i] + (float) Math.sin(elapsed + i) * 6f);
+                float x = centerX + (float) Math.cos(angle) * distance;
+                float y = centerY + (float) Math.sin(angle) * distance * .62f;
+                float fade = cycle < .18f ? cycle / .18f : Math.max(0f, (1f - cycle) / .45f);
+                int alpha = Math.max(0, Math.min(210, Math.round(210 * fade)));
+                float outer = dp(Math.round(particleSizes[i])) * (0.72f + eased * .55f);
+                DrawSparkle(canvas, x, y, outer, outer * .45f, alpha);
+            }
+
+            invalidate();
+        }
+
+        private float Pulse(float elapsed, float offset) {
+            return (float) ((Math.sin((elapsed + offset) * Math.PI * 2f) + 1f) * 0.5f);
+        }
+
+        private float EaseOut(float value) {
+            return 1f - (1f - value) * (1f - value);
+        }
+
+        private void DrawSparkle(Canvas canvas, float centerX, float centerY,
+                                 float outerRadius, float innerRadius, int alpha) {
+            starPath.reset();
+            for (int i = 0; i < 8; i++) {
+                double angle = Math.toRadians(-90 + i * 45);
+                float radius = i % 2 == 0 ? outerRadius : innerRadius;
+                float x = centerX + (float) Math.cos(angle) * radius;
+                float y = centerY + (float) Math.sin(angle) * radius;
+                if (i == 0) {
+                    starPath.moveTo(x, y);
+                } else {
+                    starPath.lineTo(x, y);
+                }
+            }
+            starPath.close();
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(Color.argb(70, 8, 18, 22));
+            canvas.save();
+            canvas.translate(dp(1), dp(1));
+            canvas.drawPath(starPath, paint);
+            canvas.restore();
+            paint.setColor(Color.argb(alpha, 232, 233, 238));
+            canvas.drawPath(starPath, paint);
+        }
     }
 
     private void SetControlsEnabled(View view, boolean enabled) {
