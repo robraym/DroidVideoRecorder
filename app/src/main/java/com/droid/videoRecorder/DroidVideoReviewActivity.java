@@ -148,7 +148,7 @@ public class DroidVideoReviewActivity extends Activity {
             return;
         }
 
-        DroidHeadService.SetHiddenByReview(true);
+        DroidHeadService.StopForVideoReview();
         BuildLayout();
         StartVideo();
     }
@@ -166,8 +166,13 @@ public class DroidVideoReviewActivity extends Activity {
     @Override
     protected void onDestroy() {
         ReleasePlayer();
-        DroidHeadService.SetHiddenByReview(false);
+        StartRecorderService();
         super.onDestroy();
+    }
+
+    private void StartRecorderService() {
+        Intent intentService = new Intent(this, DroidHeadService.class);
+        startService(intentService);
     }
 
     @Override

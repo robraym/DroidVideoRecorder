@@ -635,29 +635,10 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         tts.shutdown();
     }
 
-    public static void SetHiddenByReview(boolean hidden) {
+    public static void StopForVideoReview() {
         DroidHeadService service = activeService.get();
         if (service != null) {
-            service.mainHandler.post(() -> service.SetHiddenByReviewInternal(hidden));
-        }
-    }
-
-    private void SetHiddenByReviewInternal(boolean hidden) {
-        if (hidden) {
-            HideReadyPreview();
-            if (chatHead != null) chatHead.setVisibility(View.INVISIBLE);
-            if (txtHead != null) txtHead.setVisibility(View.INVISIBLE);
-            if (txtCameraBadge != null) txtCameraBadge.setVisibility(View.INVISIBLE);
-            if (touchTarget != null) touchTarget.setVisibility(View.INVISIBLE);
-            return;
-        }
-
-        if (chatHead != null) chatHead.setVisibility(View.VISIBLE);
-        if (touchTarget != null) touchTarget.setVisibility(View.VISIBLE);
-        if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.STOP) {
-            ShowReadyPreview();
-        } else if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.RECORD) {
-            ShowRecordingPreview();
+            service.mainHandler.post(service::StopService);
         }
     }
 
