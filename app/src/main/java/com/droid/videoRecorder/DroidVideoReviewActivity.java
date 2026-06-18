@@ -69,6 +69,8 @@ public class DroidVideoReviewActivity extends Activity {
     private TextView playLabel;
     private TextView subtitleLabel;
     private TextView closeButton;
+    private TextView processingTitleLabel;
+    private TextView processingProgressLabel;
     private LinearLayout controlsPanel;
     private View restoreControl;
     private SeekBar progressBar;
@@ -79,6 +81,10 @@ public class DroidVideoReviewActivity extends Activity {
     private boolean playing;
     private boolean deleted;
     private boolean enhancingVideo;
+    private boolean processingAudioMode;
+    private int processingProgressPercent = -1;
+    private int processingEstimatedSeconds = -1;
+    private int processingAnimationStep;
     private int processingTitleRes = R.string.revisao_video_melhorando;
     private int processingSummaryRes = R.string.revisao_video_melhorando_resumo;
     private int revealCenterX;
@@ -90,6 +96,18 @@ public class DroidVideoReviewActivity extends Activity {
         public void run() {
             UpdateProgress();
             progressHandler.postDelayed(this, 250);
+        }
+    };
+
+    private final Runnable processingAnimator = new Runnable() {
+        @Override
+        public void run() {
+            if (!enhancingVideo) {
+                return;
+            }
+            processingAnimationStep = (processingAnimationStep + 1) % 4;
+            UpdateProcessingOverlayText();
+            progressHandler.postDelayed(this, 450);
         }
     };
 
@@ -279,11 +297,17 @@ public class DroidVideoReviewActivity extends Activity {
                 getString(R.string.revisao_video_compartilhar),
                 Color.rgb(48, 118, 230),
                 v -> ShareVideo()), controlItemParams);
-        if (DroidPrefsUtils.melhorarVideo(this)) {
+        if (DroidVideoRecorder.IsVideoEnhancementSupported()) {
             controls.addView(CreateControl(android.R.drawable.ic_menu_edit,
                     getString(R.string.revisao_video_melhorar),
                     Color.rgb(38, 115, 148),
                     v -> EnhanceVideo()), controlItemParams);
+            if (DroidVideoRecorder.IsAudioNoiseReductionSupported()) {
+                controls.addView(CreateControl(android.R.drawable.ic_menu_manage,
+                        getString(R.string.revisao_video_voz),
+                        Color.rgb(112, 86, 190),
+                        v -> ReduceAudioNoise()), controlItemParams);
+            }
             restoreControl = CreateControl(android.R.drawable.ic_menu_revert,
                     getString(R.string.revisao_video_restaurar),
                     Color.rgb(86, 88, 96),
@@ -744,6 +768,14 @@ public class DroidVideoReviewActivity extends Activity {
     }
 
     private void EnhanceVideo() {
+        ProcessVideoEnhancement(false);
+    }
+
+    private void ReduceAudioNoise() {
+        ProcessVideoEnhancement(true);
+    }
+
+    private void ProcessVideoEnhancement(boolean audioMode) {
         if (enhancingVideo || deleted) {
             return;
         }
@@ -753,12 +785,19 @@ public class DroidVideoReviewActivity extends Activity {
                 videoPath,
                 displayName);
         if (!video.HasVideo()) {
-            Toast.makeText(this, getString(R.string.revisao_video_melhorar_erro), Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, getString(audioMode
+                    ? R.string.revisao_video_voz_erro
+                    : R.string.revisao_video_melhorar_erro), Toast.LENGTH_SHORT).show();
             return;
         }
 
-        processingTitleRes = R.string.revisao_video_melhorando;
-        processingSummaryRes = R.string.revisao_video_melhorando_resumo;
+        processingTitleRes = audioMode ? R.string.revisao_video_voz_processando : R.string.revisao_video_melhorando;
+        processingSummaryRes = audioMode
+                ? R.string.revisao_video_voz_processando_resumo
+                : R.string.revisao_video_melhorando_resumo;
+        processingAudioMode = audioMode;
+        processingProgressPercent = audioMode ? 1 : -1;
+        processingEstimatedSeconds = -1;
         ReleasePlayer();
         SetEnhancementState(true);
         DroidVideoRecorder.VideoEnhancementListener listener = new DroidVideoRecorder.VideoEnhancementListener() {
@@ -776,7 +815,9 @@ public class DroidVideoReviewActivity extends Activity {
                     }
                     SetEnhancementState(false);
                     Toast.makeText(DroidVideoReviewActivity.this,
-                            getString(R.string.revisao_video_melhorado),
+                            getString(audioMode
+                                    ? R.string.revisao_video_voz_aplicada
+                                    : R.string.revisao_video_melhorado),
                             Toast.LENGTH_SHORT).show();
                     StartVideo();
                 });
@@ -787,17 +828,32 @@ public class DroidVideoReviewActivity extends Activity {
                 runOnUiThread(() -> {
                     SetEnhancementState(false);
                     Toast.makeText(DroidVideoReviewActivity.this,
-                            getString(R.string.revisao_video_melhorar_erro),
+                            getString(audioMode
+                                    ? R.string.revisao_video_voz_erro
+                                    : R.string.revisao_video_melhorar_erro),
                             Toast.LENGTH_SHORT).show();
                     StartVideo();
                 });
             }
+
+            @Override
+            public void OnVideoEnhancementProgress(int percent, int estimatedSecondsRemaining) {
+                runOnUiThread(() -> {
+                    processingProgressPercent = percent;
+                    processingEstimatedSeconds = estimatedSecondsRemaining;
+                    UpdateProcessingOverlayText();
+                });
+            }
         };
-        boolean started = DroidVideoRecorder.EnhanceVideo(this, video, listener);
+        boolean started = audioMode
+                ? DroidVideoRecorder.ReduceAudioNoise(this, video, listener)
+                : DroidVideoRecorder.EnhanceVideo(this, video, listener);
 
         if (!started) {
             SetEnhancementState(false);
-            Toast.makeText(this, getString(R.string.revisao_video_melhorar_erro), Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, getString(audioMode
+                    ? R.string.revisao_video_voz_erro
+                    : R.string.revisao_video_melhorar_erro), Toast.LENGTH_SHORT).show();
             StartVideo();
         }
     }
@@ -834,6 +890,18 @@ public class DroidVideoReviewActivity extends Activity {
 
     private void SetEnhancementState(boolean enabled) {
         enhancingVideo = enabled;
+        if (enabled) {
+            processingAnimationStep = 0;
+            progressHandler.removeCallbacks(processingAnimator);
+            progressHandler.post(processingAnimator);
+        } else {
+            progressHandler.removeCallbacks(processingAnimator);
+            processingTitleLabel = null;
+            processingProgressLabel = null;
+            processingProgressPercent = -1;
+            processingEstimatedSeconds = -1;
+            processingAudioMode = false;
+        }
         if (subtitleLabel != null) {
             subtitleLabel.setText(enabled
                     ? getString(processingTitleRes)
@@ -871,7 +939,8 @@ public class DroidVideoReviewActivity extends Activity {
         panel.setBackground(CreateRounded(Color.rgb(34, 35, 39), dp(24)));
 
         TextView title = new TextView(this);
-        title.setText(getString(processingTitleRes));
+        processingTitleLabel = title;
+        title.setText(getAnimatedProcessingTitle());
         title.setTextColor(Color.WHITE);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setTextSize(16);
@@ -886,6 +955,15 @@ public class DroidVideoReviewActivity extends Activity {
         summary.setPadding(0, dp(6), 0, 0);
         panel.addView(summary);
 
+        processingProgressLabel = new TextView(this);
+        processingProgressLabel.setTextColor(Color.rgb(150, 214, 184));
+        processingProgressLabel.setTextSize(13);
+        processingProgressLabel.setTypeface(Typeface.DEFAULT_BOLD);
+        processingProgressLabel.setGravity(Gravity.CENTER);
+        processingProgressLabel.setPadding(0, dp(10), 0, 0);
+        panel.addView(processingProgressLabel);
+        UpdateProcessingOverlayText();
+
         FrameLayout.LayoutParams panelParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -894,6 +972,36 @@ public class DroidVideoReviewActivity extends Activity {
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
         enhancementOverlay.addView(panel, panelParams);
+    }
+
+    private void UpdateProcessingOverlayText() {
+        if (processingTitleLabel != null) {
+            processingTitleLabel.setText(getAnimatedProcessingTitle());
+        }
+        if (processingProgressLabel == null) {
+            return;
+        }
+
+        if (!processingAudioMode || processingProgressPercent < 0) {
+            processingProgressLabel.setText("");
+            return;
+        }
+
+        String estimate = processingEstimatedSeconds >= 0
+                ? getString(R.string.revisao_video_tempo_restante, processingEstimatedSeconds)
+                : getString(R.string.revisao_video_estimando);
+        processingProgressLabel.setText(getString(R.string.revisao_video_progresso_ia,
+                processingProgressPercent,
+                estimate));
+    }
+
+    private String getAnimatedProcessingTitle() {
+        String baseTitle = getString(processingTitleRes).replace("...", "");
+        StringBuilder dots = new StringBuilder();
+        for (int i = 0; i < processingAnimationStep; i++) {
+            dots.append('.');
+        }
+        return baseTitle + dots;
     }
 
     private void SetControlsEnabled(View view, boolean enabled) {

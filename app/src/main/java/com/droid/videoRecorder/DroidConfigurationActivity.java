@@ -180,19 +180,6 @@ public class DroidConfigurationActivity extends Activity {
                 true,
                 (buttonView, isChecked) -> BuildSettingsScreen()));
 
-        if (ShouldShowVideoEnhancement()) {
-            generalGroup.addView(CreateDivider());
-            generalGroup.addView(CreateSwitchRow(
-                    "M",
-                    COLOR_ICON_BLUE,
-                    getString(R.string.spf_melhorar_video),
-                    getString(R.string.spf_melhorar_video_resumo),
-                    "spf_melhorarVideoComIa",
-                    false,
-                    true,
-                    null));
-        }
-
         generalGroup.addView(CreateDivider());
 
         generalGroup.addView(CreateSwitchRow(
@@ -206,32 +193,8 @@ public class DroidConfigurationActivity extends Activity {
                 null));
         content.addView(generalGroup);
 
-        LinearLayout commandGroup = CreateGroup();
-        LinearLayout.LayoutParams commandParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT);
-        commandParams.setMargins(0, dp(14), 0, 0);
-        commandGroup.setLayoutParams(commandParams);
-
-        commandGroup.addView(CreateSwitchRow(
-                "V",
-                COLOR_ICON_ORANGE,
-                getString(R.string.fala),
-                getString(R.string.leComando),
-                "spf_leComando",
-                false,
-                true,
-                null));
-        content.addView(commandGroup);
-
         setContentView(scrollView);
         RefreshStorageSummary();
-    }
-
-    private boolean ShouldShowVideoEnhancement() {
-        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
-                && preferences.getBoolean("spf_salvarSelfiesComoVisualizadas", true)
-                && DroidPrefsUtils.obtemUltimaCamera(context) == DroidConstants.EnumTypeViewCam.FacingFront;
     }
 
     private View CreateSwitchRow(String iconText, int iconColor, String title, String summary,

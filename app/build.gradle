@@ -8,8 +8,8 @@ android {
         applicationId "com.droid.videoRecorder"
         minSdk 24
         targetSdk 36
-        versionCode 40
-        versionName "12.5"
+        versionCode 41
+        versionName "12.6"
     }
 
     compileOptions {
@@ -38,5 +38,7 @@ dependencies {
     implementation 'androidx.media3:media3-common:1.10.1'
     implementation 'androidx.media3:media3-exoplayer:1.10.1'
     implementation 'androidx.media3:media3-ui:1.10.1'
+    implementation 'io.github.kaleyravideo:android-deepfilternet:0.0.8'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0'
     testImplementation 'junit:junit:4.13.2'
 }

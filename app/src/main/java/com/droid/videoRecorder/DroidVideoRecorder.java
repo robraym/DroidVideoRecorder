@@ -22,6 +22,7 @@ import androidx.camera.core.CameraSelector;
 import androidx.camera.core.MirrorMode;
 import androidx.camera.core.Preview;
 import androidx.camera.lifecycle.ProcessCameraProvider;
+import androidx.camera.video.AudioSpec;
 import androidx.camera.video.FallbackStrategy;
 import androidx.camera.video.MediaStoreOutputOptions;
 import androidx.camera.video.PendingRecording;
@@ -88,6 +89,7 @@ public class DroidVideoRecorder {
     private static Transformer activeMirrorTransformer;
     private static PendingMirroredSelfie activeMirroredSelfie;
     private static PendingVideoEnhancement activeVideoEnhancement;
+    private static boolean activeAudioEnhancement;
     private static boolean pendingVideoProcessing;
     private static boolean copyingMirroredSelfie;
     private static final ProgressHolder MIRROR_PROGRESS_HOLDER = new ProgressHolder();
@@ -107,6 +109,8 @@ public class DroidVideoRecorder {
     public interface VideoEnhancementListener {
         void OnVideoEnhanced(RecordedVideo video);
         void OnVideoEnhancementFailed();
+        default void OnVideoEnhancementProgress(int percent, int estimatedSecondsRemaining) {
+        }
     }
 
     public static class RecordedVideo {
@@ -510,14 +514,78 @@ public class DroidVideoRecorder {
         if (context != null) {
             SetContext(context);
         }
-        if (appContext == null || video == null || !video.HasVideo()) {
+        if (appContext == null || video == null || !video.HasVideo()
+                || !IsVideoEnhancementSupported()) {
             return false;
         }
-        if (activeMirrorTransformer != null || activeVideoEnhancement != null) {
+        if (activeMirrorTransformer != null || activeVideoEnhancement != null || activeAudioEnhancement) {
             return false;
         }
 
         MIRROR_HANDLER.post(() -> StartVideoEnhancement(video, listener));
+        return true;
+    }
+
+    public static boolean IsVideoEnhancementSupported() {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q;
+    }
+
+    public static boolean IsAudioNoiseReductionSupported() {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q;
+    }
+
+    public static boolean ReduceAudioNoise(Context context, RecordedVideo video,
+                                           VideoEnhancementListener listener) {
+        if (context != null) {
+            SetContext(context);
+        }
+        if (appContext == null || video == null || !video.HasVideo()
+                || !IsAudioNoiseReductionSupported()) {
+            return false;
+        }
+        if (activeMirrorTransformer != null || activeVideoEnhancement != null || activeAudioEnhancement) {
+            return false;
+        }
+
+        activeAudioEnhancement = true;
+        MIRROR_COPY_EXECUTOR.execute(() -> {
+            File audioVideoFile = null;
+            RecordedVideo enhancedVideo = null;
+            try {
+                audioVideoFile = File.createTempFile("DVR_voice_", ".mp4", appContext.getCacheDir());
+                Uri inputUri = video.uri != null ? video.uri : Uri.fromFile(new File(video.legacyPath));
+                DroidAudioNoiseReducer.Process(appContext, inputUri, audioVideoFile,
+                        (percent, remainingSeconds) -> MIRROR_HANDLER.post(() ->
+                                listener.OnVideoEnhancementProgress(percent, remainingSeconds)));
+                if (video.uri != null) {
+                    Uri enhancedUri = ReplaceMediaStoreVideo(
+                            video.uri,
+                            audioVideoFile,
+                            video.displayName,
+                            false);
+                    enhancedVideo = new RecordedVideo(enhancedUri, null, video.displayName);
+                } else {
+                    String enhancedPath = CreateEnhancedLegacyVideoCopy(video, audioVideoFile);
+                    enhancedVideo = new RecordedVideo(null, enhancedPath, video.displayName);
+                }
+            } catch (Exception ex) {
+                LogException("AudioNoiseReducer", ex);
+            } finally {
+                if (audioVideoFile != null) {
+                    audioVideoFile.delete();
+                }
+            }
+
+            RecordedVideo finalEnhancedVideo = enhancedVideo;
+            MIRROR_HANDLER.post(() -> {
+                activeAudioEnhancement = false;
+                if (finalEnhancedVideo != null && finalEnhancedVideo.HasVideo()) {
+                    listener.OnVideoEnhanced(finalEnhancedVideo);
+                } else {
+                    NotifyVideoEnhancementFailed(listener);
+                }
+            });
+        });
         return true;
     }
 
@@ -763,7 +831,7 @@ public class DroidVideoRecorder {
 
     private static void LogException(String tag, Exception ex) {
         String message = ex.getMessage();
-        Log.d(tag, message != null ? message : ex.toString());
+        Log.e(tag, message != null ? message : ex.toString(), ex);
     }
 
     private static int GetDisplayOrientationRec(int orientation)
@@ -961,6 +1029,7 @@ public class DroidVideoRecorder {
                 FallbackStrategy.lowerQualityOrHigherThan(Quality.SD));
         Recorder recorder = new Recorder.Builder()
                 .setQualitySelector(qualitySelector)
+                .setAudioSource(AudioSpec.SOURCE_CAMCORDER)
                 .build();
         activeCameraXVideoCapture = new VideoCapture.Builder<>(recorder)
                 .setMirrorMode(MirrorMode.MIRROR_MODE_ON_FRONT_ONLY)
@@ -1188,7 +1257,7 @@ public class DroidVideoRecorder {
 
             mMediaRecorder = new MediaRecorder();
             mMediaRecorder.setCamera(mServiceCamera);
-            mMediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
+            mMediaRecorder.setAudioSource(GetVoiceFocusedAudioSource());
             mMediaRecorder.setVideoSource(MediaRecorder.VideoSource.CAMERA);
             SetOutputFile(mMediaRecorder);
 
@@ -1209,6 +1278,13 @@ public class DroidVideoRecorder {
             ResetRecord(false, null);
             return false;
         }
+    }
+
+    private static int GetVoiceFocusedAudioSource() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
+            return MediaRecorder.AudioSource.VOICE_COMMUNICATION;
+        }
+        return MediaRecorder.AudioSource.MIC;
     }
 
     private static RecordedVideo ResetRecord(boolean record, RecordedVideoListener listener)

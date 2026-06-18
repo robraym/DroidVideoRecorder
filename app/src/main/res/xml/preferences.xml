@@ -35,12 +35,6 @@
             android:summary="@string/txt_local_gravacao_videos"
             android:title="@string/txt_gravacao_videos"></ListPreference>
 
-        <SwitchPreference
-            android:defaultValue="false"
-            android:key="spf_leComando"
-            android:summary="@string/leComando"
-            android:title="@string/fala"></SwitchPreference>
-
     </PreferenceCategory>
 
 </PreferenceScreen>
