@@ -12,6 +12,7 @@
     <string name="spf_revisar_video_apos_gravar_resumo">Mostre o vídeo após a gravação para reproduzir, compartilhar ou mover para a lixeira.</string>
     <string name="revisao_video_titulo">Vídeo salvo</string>
     <string name="revisao_video_subtitulo">Confira sua gravação</string>
+    <string name="revisao_status_ready">Vídeo pronto</string>
     <string name="revisao_video_play">Reproduzir</string>
     <string name="revisao_video_pause">Pausar</string>
     <string name="revisao_video_apagar">Excluir</string>
@@ -20,10 +21,10 @@
     <string name="revisao_video_melhorar">IA Vídeo</string>
     <string name="revisao_video_voz">IA Áudio</string>
     <string name="revisao_video_restaurar">Restaurar</string>
-    <string name="revisao_video_melhorando">Melhorando vídeo...</string>
-    <string name="revisao_video_melhorando_resumo">Usando IA para destacar a pessoa e suavizar o fundo.</string>
-    <string name="revisao_video_voz_processando">Limpando áudio...</string>
-    <string name="revisao_video_voz_processando_resumo">Usando IA para reduzir ruído e destacar a voz.</string>
+    <string name="revisao_video_melhorando">Melhorando vídeo</string>
+    <string name="revisao_video_melhorando_resumo">Ajustando imagem</string>
+    <string name="revisao_video_voz_processando">Limpando áudio</string>
+    <string name="revisao_video_voz_processando_resumo">Reduzindo ruídos</string>
     <string name="revisao_video_progresso_ia">%1$d%% • %2$s</string>
     <string name="revisao_video_tempo_restante">cerca de %1$d s restantes</string>
     <string name="revisao_video_estimando">estimando tempo</string>

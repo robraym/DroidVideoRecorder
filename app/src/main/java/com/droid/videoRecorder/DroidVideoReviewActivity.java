@@ -72,10 +72,10 @@ public class DroidVideoReviewActivity extends Activity {
     private ExoPlayer mediaPlayer;
     private ImageButton playButton;
     private TextView playLabel;
-    private TextView subtitleLabel;
     private TextView closeButton;
-    private TextView processingTitleLabel;
-    private TextView processingProgressLabel;
+    private LinearLayout statusPanel;
+    private TextView statusTitleLabel;
+    private TextView statusDetailLabel;
     private LinearLayout controlsPanel;
     private View restoreControl;
     private SeekBar progressBar;
@@ -225,13 +225,48 @@ public class DroidVideoReviewActivity extends Activity {
         rootView = new FrameLayout(this);
         rootView.setBackgroundColor(Color.BLACK);
 
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.VERTICAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setPadding(dp(20), dp(10), dp(70), dp(8));
+
+        TextView headerTitle = new TextView(this);
+        headerTitle.setText(getString(R.string.revisao_video_titulo));
+        headerTitle.setTextColor(Color.WHITE);
+        headerTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        headerTitle.setTextSize(18);
+        headerTitle.setSingleLine(true);
+        header.addView(headerTitle);
+
+        TextView headerSubtitle = new TextView(this);
+        headerSubtitle.setText(getString(R.string.revisao_video_subtitulo));
+        headerSubtitle.setTextColor(Color.rgb(170, 174, 184));
+        headerSubtitle.setTextSize(12);
+        headerSubtitle.setSingleLine(true);
+        header.addView(headerSubtitle);
+
+        FrameLayout.LayoutParams headerParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                dp(64),
+                Gravity.TOP);
+        headerParams.setMargins(0, dp(8), 0, 0);
+        rootView.addView(header, headerParams);
+
+        FrameLayout mediaPanel = new FrameLayout(this);
+        mediaPanel.setPadding(dp(8), dp(8), dp(8), dp(8));
+        mediaPanel.setBackground(CreateRounded(Color.rgb(18, 19, 23), dp(24)));
+        FrameLayout.LayoutParams mediaPanelParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT);
+        mediaPanelParams.setMargins(dp(16), dp(80), dp(16), dp(176));
+        rootView.addView(mediaPanel, mediaPanelParams);
+
         videoContainer = new FrameLayout(this);
         videoContainer.setBackgroundColor(Color.BLACK);
         FrameLayout.LayoutParams videoContainerParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT);
-        videoContainerParams.setMargins(0, dp(110), 0, dp(182));
-        rootView.addView(videoContainer, videoContainerParams);
+        mediaPanel.addView(videoContainer, videoContainerParams);
 
         videoView = new PlayerView(this);
         videoView.setBackgroundColor(Color.BLACK);
@@ -242,31 +277,6 @@ public class DroidVideoReviewActivity extends Activity {
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 Gravity.CENTER));
-
-        LinearLayout header = new LinearLayout(this);
-        header.setOrientation(LinearLayout.VERTICAL);
-        header.setPadding(dp(22), dp(28), dp(22), dp(18));
-        header.setBackgroundColor(Color.argb(178, 0, 0, 0));
-
-        TextView title = new TextView(this);
-        title.setText(getString(R.string.revisao_video_titulo));
-        title.setTextColor(Color.WHITE);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
-        title.setTextSize(24);
-        header.addView(title);
-
-        subtitleLabel = new TextView(this);
-        subtitleLabel.setText(getString(R.string.revisao_video_subtitulo));
-        subtitleLabel.setTextColor(Color.rgb(190, 193, 201));
-        subtitleLabel.setTextSize(14);
-        subtitleLabel.setPadding(0, dp(4), 0, 0);
-        header.addView(subtitleLabel);
-
-        FrameLayout.LayoutParams headerParams = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                Gravity.TOP);
-        rootView.addView(header, headerParams);
 
         closeButton = new TextView(this);
         closeButton.setText("X");
@@ -285,12 +295,42 @@ public class DroidVideoReviewActivity extends Activity {
         closeParams.setMargins(0, dp(28), dp(18), 0);
         rootView.addView(closeButton, closeParams);
 
+        statusPanel = new LinearLayout(this);
+        statusPanel.setOrientation(LinearLayout.VERTICAL);
+        statusPanel.setGravity(Gravity.CENTER);
+        statusPanel.setPadding(dp(18), dp(9), dp(18), dp(9));
+        statusPanel.setBackground(CreateRounded(Color.argb(150, 28, 29, 33), dp(18)));
+
+        statusTitleLabel = new TextView(this);
+        statusTitleLabel.setTextColor(Color.rgb(232, 233, 238));
+        statusTitleLabel.setTextSize(14);
+        statusTitleLabel.setTypeface(Typeface.DEFAULT_BOLD);
+        statusTitleLabel.setGravity(Gravity.CENTER);
+        statusTitleLabel.setSingleLine(true);
+        statusPanel.addView(statusTitleLabel);
+
+        statusDetailLabel = new TextView(this);
+        statusDetailLabel.setTextColor(Color.rgb(190, 193, 201));
+        statusDetailLabel.setTextSize(12);
+        statusDetailLabel.setGravity(Gravity.CENTER);
+        statusDetailLabel.setSingleLine(true);
+        statusDetailLabel.setPadding(0, dp(2), 0, 0);
+        statusPanel.addView(statusDetailLabel);
+        statusPanel.setVisibility(View.GONE);
+
+        FrameLayout.LayoutParams statusParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM);
+        statusParams.setMargins(dp(8), 0, dp(8), dp(8));
+        mediaPanel.addView(statusPanel, statusParams);
+
         LinearLayout progressPanel = CreateProgressPanel();
         FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.BOTTOM);
-        progressParams.setMargins(dp(18), 0, dp(18), dp(118));
+        progressParams.setMargins(dp(16), 0, dp(16), dp(122));
         rootView.addView(progressPanel, progressParams);
 
         LinearLayout controls = new LinearLayout(this);
@@ -811,7 +851,11 @@ public class DroidVideoReviewActivity extends Activity {
         processingAudioMode = audioMode;
         processingProgressPercent = 1;
         processingEstimatedSeconds = -1;
-        ReleasePlayer();
+        if (audioMode) {
+            PausePlayerForProcessing();
+        } else {
+            ReleasePlayer();
+        }
         SetEnhancementState(true);
         DroidVideoRecorder.VideoEnhancementListener listener = new DroidVideoRecorder.VideoEnhancementListener() {
             @Override
@@ -890,6 +934,14 @@ public class DroidVideoReviewActivity extends Activity {
         StartVideo();
     }
 
+    private void PausePlayerForProcessing() {
+        if (mediaPlayer != null) {
+            mediaPlayer.pause();
+            playing = false;
+            UpdatePlayState();
+        }
+    }
+
     private void DeleteEnhancedVideoIfPossible() {
         try {
             if (enhancedVideoUri != null) {
@@ -909,20 +961,18 @@ public class DroidVideoReviewActivity extends Activity {
             progressHandler.post(processingAnimator);
         } else {
             progressHandler.removeCallbacks(processingAnimator);
-            processingTitleLabel = null;
-            processingProgressLabel = null;
             processingProgressPercent = -1;
             processingEstimatedSeconds = -1;
             processingAudioMode = false;
         }
-        if (subtitleLabel != null) {
-            subtitleLabel.setText(enabled
-                    ? getString(processingTitleRes)
-                    : getString(R.string.revisao_video_subtitulo));
-        }
         SetControlsEnabled(controlsPanel, !enabled);
         if (controlsPanel != null) {
             controlsPanel.setAlpha(enabled ? 0.45f : 1f);
+        }
+        if (enabled) {
+            UpdateProcessingOverlayText();
+        } else {
+            HideStatus();
         }
         SetControlsEnabled(closeButton, !enabled);
         if (closeButton != null) {
@@ -943,75 +993,47 @@ public class DroidVideoReviewActivity extends Activity {
         }
 
         enhancementOverlay = new FrameLayout(this);
-        enhancementOverlay.setBackgroundColor(Color.argb(122, 0, 0, 0));
-
-        LinearLayout panel = new LinearLayout(this);
-        panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setGravity(Gravity.CENTER);
-        panel.setPadding(dp(24), dp(22), dp(24), dp(22));
-        panel.setMinimumWidth(dp(236));
-        panel.setBackground(CreateRounded(Color.rgb(31, 32, 37), dp(26)));
+        enhancementOverlay.setBackgroundColor(Color.TRANSPARENT);
 
         ProcessingStarsView starsView = new ProcessingStarsView(this);
-        LinearLayout.LayoutParams starsParams = new LinearLayout.LayoutParams(dp(184), dp(104));
-        starsParams.setMargins(0, 0, 0, dp(10));
-        panel.addView(starsView, starsParams);
+        enhancementOverlay.addView(starsView, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
 
-        TextView title = new TextView(this);
-        processingTitleLabel = title;
-        title.setText(getAnimatedProcessingTitle());
-        title.setTextColor(Color.WHITE);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
-        title.setTextSize(16);
-        title.setGravity(Gravity.CENTER);
-        panel.addView(title);
-
-        TextView summary = new TextView(this);
-        summary.setText(getString(processingSummaryRes));
-        summary.setTextColor(Color.rgb(190, 193, 201));
-        summary.setTextSize(12);
-        summary.setGravity(Gravity.CENTER);
-        summary.setPadding(0, dp(6), 0, 0);
-        panel.addView(summary);
-
-        processingProgressLabel = new TextView(this);
-        processingProgressLabel.setTextColor(Color.rgb(150, 214, 184));
-        processingProgressLabel.setTextSize(13);
-        processingProgressLabel.setTypeface(Typeface.DEFAULT_BOLD);
-        processingProgressLabel.setGravity(Gravity.CENTER);
-        processingProgressLabel.setPadding(0, dp(10), 0, 0);
-        panel.addView(processingProgressLabel);
         UpdateProcessingOverlayText();
-
-        FrameLayout.LayoutParams panelParams = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                Gravity.CENTER);
         rootView.addView(enhancementOverlay, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
-        enhancementOverlay.addView(panel, panelParams);
+    }
+
+    private void UpdateStatus(String title, String detail) {
+        if (statusPanel == null || statusTitleLabel == null || statusDetailLabel == null) {
+            return;
+        }
+        statusPanel.setVisibility(View.VISIBLE);
+        statusTitleLabel.setText(title);
+        if (detail == null || detail.length() == 0) {
+            statusDetailLabel.setVisibility(View.GONE);
+        } else {
+            statusDetailLabel.setText(detail);
+            statusDetailLabel.setVisibility(View.VISIBLE);
+        }
+    }
+
+    private void HideStatus() {
+        if (statusPanel != null) {
+            statusPanel.setVisibility(View.GONE);
+        }
     }
 
     private void UpdateProcessingOverlayText() {
-        if (processingTitleLabel != null) {
-            processingTitleLabel.setText(getAnimatedProcessingTitle());
-        }
-        if (processingProgressLabel == null) {
-            return;
-        }
-
         if (processingProgressPercent < 0) {
-            processingProgressLabel.setText("");
+            UpdateStatus(getAnimatedProcessingTitle(), getString(processingSummaryRes));
             return;
         }
 
-        String estimate = processingEstimatedSeconds >= 0
-                ? getString(R.string.revisao_video_tempo_restante, processingEstimatedSeconds)
-                : getString(R.string.revisao_video_estimando);
-        processingProgressLabel.setText(getString(R.string.revisao_video_progresso_ia,
-                processingProgressPercent,
-                estimate));
+        UpdateStatus(getAnimatedProcessingTitle(),
+                getString(processingSummaryRes) + " • " + processingProgressPercent + "%");
     }
 
     private String getAnimatedProcessingTitle() {
@@ -1027,9 +1049,21 @@ public class DroidVideoReviewActivity extends Activity {
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Path starPath = new Path();
         private final long startedAtMs = System.currentTimeMillis();
-        private final float[] particleAngles = {-155f, -118f, -68f, -18f, 22f, 64f, 116f, 158f};
-        private final float[] particleDelays = {0f, .16f, .34f, .08f, .48f, .25f, .58f, .42f};
-        private final float[] particleSizes = {8f, 13f, 19f, 10f, 15f, 9f, 12f, 7f};
+        private final float[] particleX = {.12f, .22f, .34f, .48f, .62f, .76f, .88f, .18f, .42f, .68f, .82f, .52f};
+        private final float[] particleY = {.18f, .66f, .32f, .82f, .22f, .58f, .38f, .42f, .12f, .74f, .84f, .50f};
+        private final float[] particleDelays = {0f, .16f, .34f, .08f, .48f, .25f, .58f, .42f, .72f, .62f, .88f, .52f};
+        private final float[] particleSizes = {12f, 18f, 24f, 13f, 20f, 14f, 16f, 10f, 15f, 22f, 11f, 30f};
+        private final float[] noteX = {.08f, .14f, .20f, .27f, .34f, .42f, .50f, .58f, .65f, .72f, .80f, .88f, .94f, .18f, .38f, .62f, .78f, .46f};
+        private final float[] noteY = {.72f, .30f, .88f, .20f, .58f, .80f, .34f, .16f, .70f, .42f, .84f, .50f, .26f, .46f, .12f, .92f, .62f, .52f};
+        private final float[] noteDelays = {.10f, .36f, .66f, .04f, .44f, .24f, .78f, .54f, .88f, .18f, .62f, .72f, .30f, .94f, .50f, .82f, .14f, .58f};
+        private final float[] noteSizes = {28f, 18f, 24f, 34f, 20f, 30f, 17f, 26f, 38f, 19f, 32f, 22f, 16f, 27f, 21f, 35f, 25f, 42f};
+        private final int[] particleColors = {
+                Color.rgb(109, 214, 238),
+                Color.rgb(150, 214, 184),
+                Color.rgb(166, 154, 245),
+                Color.rgb(245, 209, 112),
+                Color.rgb(117, 190, 255)
+        };
 
         ProcessingStarsView(Context context) {
             super(context);
@@ -1045,21 +1079,40 @@ public class DroidVideoReviewActivity extends Activity {
             float elapsed = (System.currentTimeMillis() - startedAtMs) / 1000f;
 
             paint.setStyle(Paint.Style.FILL);
-            paint.setColor(Color.argb(24, 128, 139, 224));
-            canvas.drawCircle(centerX, centerY, dp(19) + dp(3) * Pulse(elapsed, 0f), paint);
+            paint.setColor(Color.argb(46, 31, 32, 37));
+            canvas.drawRect(0, 0, width, height, paint);
 
-            DrawSparkle(canvas, centerX, centerY, dp(18) + dp(3) * Pulse(elapsed, .2f), dp(8), 238);
-            for (int i = 0; i < particleAngles.length; i++) {
-                float cycle = ((elapsed * 0.72f) + particleDelays[i]) % 1f;
+            DrawSparkle(canvas, centerX, centerY - dp(68),
+                    dp(26) + dp(5) * Pulse(elapsed, .2f),
+                    dp(12),
+                    235,
+                    Color.rgb(150, 214, 184));
+            for (int i = 0; i < particleX.length; i++) {
+                float cycle = ((elapsed * 0.68f) + particleDelays[i]) % 1f;
                 float eased = EaseOut(cycle);
-                float distance = dp(14) + eased * dp(58 + (i % 3) * 8);
-                double angle = Math.toRadians(particleAngles[i] + (float) Math.sin(elapsed + i) * 6f);
-                float x = centerX + (float) Math.cos(angle) * distance;
-                float y = centerY + (float) Math.sin(angle) * distance * .62f;
-                float fade = cycle < .18f ? cycle / .18f : Math.max(0f, (1f - cycle) / .45f);
-                int alpha = Math.max(0, Math.min(210, Math.round(210 * fade)));
-                float outer = dp(Math.round(particleSizes[i])) * (0.72f + eased * .55f);
-                DrawSparkle(canvas, x, y, outer, outer * .45f, alpha);
+                float drift = (float) Math.sin(elapsed * .9f + i * 1.7f) * dp(18);
+                float x = width * particleX[i] + drift;
+                float y = height * particleY[i] - eased * dp(42);
+                float fade = cycle < .24f ? cycle / .24f : Math.max(0f, (1f - cycle) / .52f);
+                int alpha = Math.max(0, Math.min(190, Math.round(190 * fade)));
+                float outer = dp(Math.round(particleSizes[i])) * (0.75f + eased * .40f);
+                DrawSparkle(canvas, x, y, outer, outer * .45f, alpha,
+                        particleColors[i % particleColors.length]);
+            }
+            if (processingAudioMode) {
+                for (int i = 0; i < noteX.length; i++) {
+                    float cycle = ((elapsed * 0.96f) + noteDelays[i]) % 1f;
+                    float eased = EaseOut(cycle);
+                    float sway = (float) Math.sin(elapsed * 2.4f + i) * dp(24);
+                    float x = width * noteX[i] + sway;
+                    float y = height * noteY[i] - eased * dp(92);
+                    float fade = cycle < .20f ? cycle / .20f : Math.max(0f, (1f - cycle) / .55f);
+                    int alpha = Math.max(0, Math.min(215, Math.round(215 * fade)));
+                    float size = dp(Math.round(noteSizes[i])) * (0.86f + eased * .30f);
+                    DrawMusicNote(canvas, x, y, size, alpha,
+                            particleColors[(i + 1) % particleColors.length],
+                            (float) Math.sin(elapsed + i) * 8f);
+                }
             }
 
             invalidate();
@@ -1074,7 +1127,7 @@ public class DroidVideoReviewActivity extends Activity {
         }
 
         private void DrawSparkle(Canvas canvas, float centerX, float centerY,
-                                 float outerRadius, float innerRadius, int alpha) {
+                                 float outerRadius, float innerRadius, int alpha, int color) {
             starPath.reset();
             for (int i = 0; i < 8; i++) {
                 double angle = Math.toRadians(-90 + i * 45);
@@ -1094,8 +1147,51 @@ public class DroidVideoReviewActivity extends Activity {
             canvas.translate(dp(1), dp(1));
             canvas.drawPath(starPath, paint);
             canvas.restore();
-            paint.setColor(Color.argb(alpha, 232, 233, 238));
+            paint.setColor(Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color)));
             canvas.drawPath(starPath, paint);
+        }
+
+        private void DrawMusicNote(Canvas canvas, float x, float y, float size,
+                                   int alpha, int color, float rotation) {
+            paint.setStyle(Paint.Style.FILL);
+            paint.setStrokeCap(Paint.Cap.ROUND);
+            paint.setStrokeWidth(Math.max(2f, size * .13f));
+
+            canvas.save();
+            canvas.rotate(rotation, x, y);
+
+            paint.setColor(Color.argb(65, 8, 18, 22));
+            DrawMusicNoteShape(canvas, x + dp(1), y + dp(1), size);
+
+            paint.setColor(Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color)));
+            DrawMusicNoteShape(canvas, x, y, size);
+
+            canvas.restore();
+        }
+
+        private void DrawMusicNoteShape(Canvas canvas, float x, float y, float size) {
+            float headWidth = size * .58f;
+            float headHeight = size * .38f;
+            RectF head = new RectF(
+                    x - headWidth * .55f,
+                    y + size * .22f,
+                    x + headWidth * .45f,
+                    y + size * .22f + headHeight);
+            canvas.drawOval(head, paint);
+
+            float stemX = x + headWidth * .34f;
+            float stemTop = y - size * .58f;
+            float stemBottom = y + size * .33f;
+            canvas.drawLine(stemX, stemBottom, stemX, stemTop, paint);
+
+            Path flag = new Path();
+            flag.moveTo(stemX, stemTop);
+            flag.cubicTo(stemX + size * .44f, stemTop + size * .08f,
+                    stemX + size * .48f, stemTop + size * .34f,
+                    stemX + size * .08f, stemTop + size * .42f);
+            flag.lineTo(stemX, stemTop + size * .26f);
+            flag.close();
+            canvas.drawPath(flag, paint);
         }
     }
 

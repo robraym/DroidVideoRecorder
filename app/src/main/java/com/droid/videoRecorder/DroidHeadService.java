@@ -54,7 +54,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     private static final String NOTIFICATION_CHANNEL_ID = "droid_video_recorder_service";
     private static final int CHAT_HEAD_DEFAULT_SIZE_DP = 122;
     private static final int CHAT_HEAD_MIN_SIZE_DP = 84;
-    private static final int CHAT_HEAD_MAX_SIZE_DP = 220;
+    private static final int CHAT_HEAD_SCREEN_MARGIN_DP = 30;
     private static final int CHAT_HEAD_MIN_TOUCH_SIZE_DP = 148;
     private static final int TRASH_TARGET_WIDTH_DP = 104;
     private static final int TRASH_TARGET_HEIGHT_DP = 108;
@@ -89,6 +89,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     private boolean trashTargetHighlighted;
     private boolean settingsTargetHighlighted;
     private boolean closingFromTrash;
+    private boolean resizeBubbleIndicatorActive;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private PalmGestureDetector palmGestureDetector;
     private boolean palmCountdownActive;
@@ -186,6 +187,18 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
 
     private int dp(int value) {
         return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    private int GetMaxChatHeadSizeDp() {
+        float density = getResources().getDisplayMetrics().density;
+        if (density <= 0f) {
+            return CHAT_HEAD_DEFAULT_SIZE_DP;
+        }
+
+        int screenWidthDp = Math.round(getResources().getDisplayMetrics().widthPixels / density);
+        int screenHeightDp = Math.round(getResources().getDisplayMetrics().heightPixels / density);
+        int shortestSideDp = Math.min(screenWidthDp, screenHeightDp);
+        return Math.max(CHAT_HEAD_MIN_SIZE_DP, shortestSideDp - CHAT_HEAD_SCREEN_MARGIN_DP);
     }
 
     private int BubbleDp(int baseValue) {
@@ -402,7 +415,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
                 context,
                 CHAT_HEAD_DEFAULT_SIZE_DP,
                 CHAT_HEAD_MIN_SIZE_DP,
-                CHAT_HEAD_MAX_SIZE_DP);
+                GetMaxChatHeadSizeDp());
 
         windowManager = (WindowManager) context.getSystemService(WINDOW_SERVICE);
 
@@ -947,7 +960,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         }
 
         chatHead.setImageDrawable(null);
-        chatHead.setBackground(CreatePreviewBorder(Color.rgb(49, 184, 96)));
+        chatHead.setBackground(null);
         HideCameraIndicator();
         SetPreviewBubble();
         StartReadyPreview(DroidVideoRecorder.TypeViewCam);
@@ -1026,6 +1039,60 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         border.setColor(Color.TRANSPARENT);
         border.setStroke(dp(BubbleDp(3)), color);
         return border;
+    }
+
+    private GradientDrawable CreateResizeBubbleBackground() {
+        GradientDrawable background = new GradientDrawable();
+        background.setShape(GradientDrawable.OVAL);
+        background.setColor(Color.argb(178, 24, 27, 31));
+        return background;
+    }
+
+    private String GetBubbleSizePercentText() {
+        int maxSizeDp = GetMaxChatHeadSizeDp();
+        int sizeRange = Math.max(1, maxSizeDp - CHAT_HEAD_MIN_SIZE_DP);
+        int percent = 1 + Math.round((chatHeadSizeDp - CHAT_HEAD_MIN_SIZE_DP) * 99f / sizeRange);
+        percent = Math.max(1, Math.min(100, percent));
+        return percent + "%";
+    }
+
+    private void ShowResizeBubbleIndicator() {
+        resizeBubbleIndicatorActive = true;
+        chatHead.setImageDrawable(null);
+        chatHead.setBackground(CreateResizeBubbleBackground());
+        txtHead.animate().cancel();
+        txtHead.setAlpha(1f);
+        txtHead.setSingleLine(true);
+        txtHead.setText(GetBubbleSizePercentText());
+        txtHead.setTextSize(BubbleTextSize(18));
+        txtHead.setGravity(Gravity.CENTER);
+        txtHead.setPadding(0, 0, 0, 0);
+        txtHead.setVisibility(View.VISIBLE);
+        if (txtCameraBadge != null) {
+            txtCameraBadge.setVisibility(View.INVISIBLE);
+        }
+    }
+
+    private void UpdateResizeBubbleIndicator() {
+        if (!resizeBubbleIndicatorActive) {
+            return;
+        }
+        chatHead.setBackground(CreateResizeBubbleBackground());
+        txtHead.setText(GetBubbleSizePercentText());
+        txtHead.setTextSize(BubbleTextSize(18));
+    }
+
+    private void HideResizeBubbleIndicator() {
+        if (!resizeBubbleIndicatorActive) {
+            return;
+        }
+        resizeBubbleIndicatorActive = false;
+        txtHead.setVisibility(View.INVISIBLE);
+        txtHead.setSingleLine(false);
+        chatHead.setImageDrawable(null);
+        chatHead.setBackground(null);
+        HideCameraIndicator();
+        HideRecordingBadge();
     }
 
     private float GetVideoProcessingProgressFraction() {
@@ -1216,7 +1283,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             return;
         }
 
-        chatHeadSizeDp = Math.max(CHAT_HEAD_MIN_SIZE_DP, Math.min(CHAT_HEAD_MAX_SIZE_DP, newSizeDp));
+        chatHeadSizeDp = Math.max(CHAT_HEAD_MIN_SIZE_DP, Math.min(GetMaxChatHeadSizeDp(), newSizeDp));
         params.width = dp(chatHeadSizeDp);
         params.height = dp(chatHeadSizeDp);
         touchParams.width = dp(GetTouchTargetSizeDp());
@@ -1227,7 +1294,9 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         readyPreviewParams.height = dp(chatHeadSizeDp);
         txtCameraBadge.setPadding(0, 0, 0, dp(BubbleDp(5)));
         txtCameraBadge.setTextSize(BubbleTextSize(9));
-        chatHead.setBackground(CreatePreviewBorder(Color.rgb(49, 184, 96)));
+        if (!resizeBubbleIndicatorActive) {
+            chatHead.setBackground(null);
+        }
 
         try {
             windowManager.updateViewLayout(readyPreviewView, readyPreviewParams);
@@ -1495,7 +1564,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             chatHead.setBackground(CreatePreviewBorder(Color.rgb(232, 65, 72)));
         } else if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.STOP) {
             chatHead.setImageDrawable(null);
-            chatHead.setBackground(CreatePreviewBorder(Color.rgb(49, 184, 96)));
+            chatHead.setBackground(null);
         }
     }
 
@@ -1704,12 +1773,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     private void StartReadyPreview(DroidConstants.EnumTypeViewCam typeViewCam) {
         pendingReadyPreview = true;
         pendingPreviewCam = typeViewCam;
-        mainHandler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                StartPendingReadyPreview();
-            }
-        }, 300);
+        StartPendingReadyPreview();
     }
 
     private void StartPendingReadyPreview() {
@@ -2291,21 +2355,27 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
                 new ScaleGestureDetector.SimpleOnScaleGestureListener() {
                     @Override
                     public boolean onScaleBegin(ScaleGestureDetector detector) {
-                        return DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.STOP
+                        boolean canScale = DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.STOP
                                 && !palmCountdownActive
                                 && !trashDragActive;
+                        if (canScale) {
+                            ShowResizeBubbleIndicator();
+                        }
+                        return canScale;
                     }
 
                     @Override
                     public boolean onScale(ScaleGestureDetector detector) {
                         int scaledSize = Math.round(chatHeadSizeDp * detector.getScaleFactor());
                         ResizeReadyBubble(scaledSize, false);
+                        UpdateResizeBubbleIndicator();
                         return true;
                     }
 
                     @Override
                     public void onScaleEnd(ScaleGestureDetector detector) {
                         DroidPrefsUtils.salvaTamanhoBolinha(context, chatHeadSizeDp);
+                        HideResizeBubbleIndicator();
                     }
                 });
 
@@ -2330,6 +2400,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
                 if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
                     multiTouchGesture = false;
                     singleFingerGestureAccepted = false;
+                    HideResizeBubbleIndicator();
                 }
                 return true;
             }

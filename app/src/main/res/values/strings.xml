@@ -12,6 +12,7 @@
     <string name="spf_revisar_video_apos_gravar_resumo">Show the video after recording to play, share, or move it to trash.</string>
     <string name="revisao_video_titulo">Video saved</string>
     <string name="revisao_video_subtitulo">Check your recording</string>
+    <string name="revisao_status_ready">Video ready</string>
     <string name="revisao_video_play">Play</string>
     <string name="revisao_video_pause">Pause</string>
     <string name="revisao_video_apagar">Delete</string>
@@ -20,10 +21,10 @@
     <string name="revisao_video_melhorar">AI Video</string>
     <string name="revisao_video_voz">AI Audio</string>
     <string name="revisao_video_restaurar">Restore</string>
-    <string name="revisao_video_melhorando">Enhancing video...</string>
-    <string name="revisao_video_melhorando_resumo">Using AI to highlight the person and soften the background.</string>
-    <string name="revisao_video_voz_processando">Cleaning audio...</string>
-    <string name="revisao_video_voz_processando_resumo">Using AI to reduce noise and highlight the voice.</string>
+    <string name="revisao_video_melhorando">Enhancing video</string>
+    <string name="revisao_video_melhorando_resumo">Adjusting image</string>
+    <string name="revisao_video_voz_processando">Cleaning audio</string>
+    <string name="revisao_video_voz_processando_resumo">Reducing noise</string>
     <string name="revisao_video_progresso_ia">%1$d%% • %2$s</string>
     <string name="revisao_video_tempo_restante">about %1$d s remaining</string>
     <string name="revisao_video_estimando">estimating time</string>
