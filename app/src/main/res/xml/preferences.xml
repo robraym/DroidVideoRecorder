@@ -8,13 +8,6 @@
             android:key="spf_exibeAoIniciar"
             android:summary="@string/spf_exibe_iniciar"
             android:title="@string/txt_titulo"></SwitchPreference>
-
-        <SwitchPreference
-            android:defaultValue="true"
-            android:key="spf_exibeTempoGravacao"
-            android:summary="@string/spf_exibe_tempo_gravacao"
-            android:title="@string/spf_titulo"></SwitchPreference>
-
         <SwitchPreference
             android:defaultValue="true"
             android:key="spf_salvarSelfiesComoVisualizadas"

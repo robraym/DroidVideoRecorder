@@ -243,7 +243,11 @@ public class DroidVideoReviewActivity extends Activity {
         headerSubtitle.setTextColor(Color.rgb(170, 174, 184));
         headerSubtitle.setTextSize(12);
         headerSubtitle.setSingleLine(true);
-        header.addView(headerSubtitle);
+        headerSubtitle.setIncludeFontPadding(true);
+        headerSubtitle.setPadding(0, 0, 0, dp(2));
+        header.addView(headerSubtitle, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(22)));
 
         FrameLayout.LayoutParams headerParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,

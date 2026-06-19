@@ -4,8 +4,6 @@
     <string name="txt_titulo">Configurações</string>
     <string name="txt_tela_Config">TELA DE CONFIGURAÇÕES</string>
     <string name="spf_exibe_iniciar">Mostrar esta tela ao abrir o app</string>
-    <string name="spf_exibe_tempo_gravacao">Mostrar contador durante a gravação</string>
-    <string name="spf_titulo">Contador de gravação</string>
     <string name="spf_salvar_selfies_como_visualizadas">Salvar selfies como visualizadas</string>
     <string name="spf_salvar_selfies_como_visualizadas_resumo">Salva as selfies e os vídeos selfie conforme aparecem na pré-visualização sem invertê-los.</string>
     <string name="spf_revisar_video_apos_gravar">Revisão do vídeo</string>

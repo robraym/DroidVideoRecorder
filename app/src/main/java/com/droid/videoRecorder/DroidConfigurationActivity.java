@@ -156,17 +156,6 @@ public class DroidConfigurationActivity extends Activity {
         header.addView(closeButton, new LinearLayout.LayoutParams(dp(42), dp(42)));
 
         LinearLayout generalGroup = CreateGroup();
-        generalGroup.addView(CreateSwitchRow(
-                "T",
-                COLOR_ICON_GREEN,
-                getString(R.string.spf_titulo),
-                getString(R.string.spf_exibe_tempo_gravacao),
-                "spf_exibeTempoGravacao",
-                true,
-                true,
-                null));
-        generalGroup.addView(CreateDivider());
-
         generalGroup.addView(CreateStorageRow());
         generalGroup.addView(CreateDivider());
 

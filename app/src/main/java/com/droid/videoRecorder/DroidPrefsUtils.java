@@ -51,19 +51,6 @@ public class DroidPrefsUtils {
         return false;
     }
 
-
-    public static boolean exibeTempoGravacao(final Context context) {
-        boolean spf = false;
-        try {
-            SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
-            spf = sp.getBoolean("spf_exibeTempoGravacao", true);
-        } catch (Exception ex) {
-            Log.d("DroidVideo", ex.getMessage());
-        }
-        return spf;
-
-    }
-
     public static void marcaTelaInicialExibida(final Context context) {
         try {
             SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
