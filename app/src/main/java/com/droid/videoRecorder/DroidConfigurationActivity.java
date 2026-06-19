@@ -3,6 +3,8 @@ package com.droid.videoRecorder;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -76,8 +78,9 @@ public class DroidConfigurationActivity extends Activity {
         preferences = PreferenceManager.getDefaultSharedPreferences(context);
         boolean exibeTelaInicial = ExibeTelaInicial();
         boolean chamadaPeloServico = ChamadaPeloServico();
+        boolean hasPendingCrash = DroidCrashReporter.HasPendingCrash(context);
 
-        settingsScreenVisible = exibeTelaInicial || chamadaPeloServico;
+        settingsScreenVisible = hasPendingCrash || exibeTelaInicial || chamadaPeloServico;
 
         if (settingsScreenVisible) {
             setTheme(R.style.DefaultTheme);
@@ -91,6 +94,9 @@ public class DroidConfigurationActivity extends Activity {
             BuildSettingsScreen();
             if (exibeTelaInicial && !chamadaPeloServico) {
                 DroidPrefsUtils.marcaTelaInicialExibida(context);
+            }
+            if (hasPendingCrash) {
+                getWindow().getDecorView().post(this::ShowLastCrashDialog);
             }
         } else if (HasRuntimePermissions() && HasOverlayPermission()) {
             finish();
@@ -392,6 +398,74 @@ public class DroidConfigurationActivity extends Activity {
             if (dialog.getWindow() != null) {
                 dialog.getWindow().setBackgroundDrawable(CreateRoundedBackground(Color.TRANSPARENT, 24));
             }
+        });
+        dialog.show();
+    }
+
+    private void ShowLastCrashDialog() {
+        String crash = DroidCrashReporter.GetLastCrash(context);
+        if (crash == null || crash.length() == 0 || isFinishing()) {
+            return;
+        }
+
+        LinearLayout dialogContent = new LinearLayout(this);
+        dialogContent.setOrientation(LinearLayout.VERTICAL);
+        dialogContent.setPadding(dp(22), dp(20), dp(22), dp(16));
+        dialogContent.setBackground(CreateRoundedBackground(COLOR_DIALOG, 24));
+
+        TextView title = new TextView(this);
+        title.setText(getString(R.string.diagnostico_erro_titulo));
+        title.setTextColor(COLOR_PRIMARY_TEXT);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        SetTextSize(title, 20);
+        dialogContent.addView(title);
+
+        TextView summary = new TextView(this);
+        summary.setText(getString(R.string.diagnostico_erro_resumo));
+        summary.setTextColor(COLOR_SECONDARY_TEXT);
+        SetTextSize(summary, 13);
+        summary.setPadding(0, dp(8), 0, dp(12));
+        dialogContent.addView(summary);
+
+        TextView details = new TextView(this);
+        details.setText(crash);
+        details.setTextColor(Color.rgb(218, 220, 226));
+        details.setTextIsSelectable(true);
+        SetTextSize(details, 11);
+        details.setPadding(dp(12), dp(10), dp(12), dp(10));
+        details.setBackground(CreateRoundedBackground(Color.rgb(18, 19, 23), 14));
+
+        ScrollView detailsScroll = new ScrollView(this);
+        detailsScroll.addView(details);
+        dialogContent.addView(detailsScroll, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(260)));
+
+        final AlertDialog dialog = new AlertDialog.Builder(this)
+                .setView(dialogContent)
+                .setNegativeButton(getString(R.string.diagnostico_erro_copiar), null)
+                .setPositiveButton(getString(R.string.diagnostico_erro_fechar), null)
+                .create();
+
+        dialog.setOnShowListener(dialogInterface -> {
+            if (dialog.getWindow() != null) {
+                dialog.getWindow().setBackgroundDrawable(CreateRoundedBackground(Color.TRANSPARENT, 24));
+            }
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(COLOR_ACCENT);
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(COLOR_PRIMARY_TEXT);
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener(v -> {
+                ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                if (clipboard != null) {
+                    clipboard.setPrimaryClip(ClipData.newPlainText(
+                            getString(R.string.diagnostico_erro_titulo),
+                            crash));
+                    Toast.makeText(this, getString(R.string.diagnostico_erro_copiado), Toast.LENGTH_SHORT).show();
+                }
+            });
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+                DroidCrashReporter.ClearLastCrash(context);
+                dialog.dismiss();
+            });
         });
         dialog.show();
     }

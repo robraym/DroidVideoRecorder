@@ -36,6 +36,7 @@ import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
@@ -172,7 +173,7 @@ public class DroidVideoReviewActivity extends Activity {
 
     private void StartRecorderService() {
         Intent intentService = new Intent(this, DroidHeadService.class);
-        startService(intentService);
+        ContextCompat.startForegroundService(this, intentService);
     }
 
     @Override

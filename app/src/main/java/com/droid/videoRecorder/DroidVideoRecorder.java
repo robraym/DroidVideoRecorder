@@ -32,6 +32,7 @@ import androidx.camera.video.Recorder;
 import androidx.camera.video.Recording;
 import androidx.camera.video.VideoCapture;
 import androidx.camera.video.VideoRecordEvent;
+import androidx.core.content.ContextCompat;
 import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.LifecycleOwner;
 import androidx.lifecycle.LifecycleRegistry;
@@ -45,6 +46,7 @@ import androidx.media3.transformer.ExportException;
 import androidx.media3.transformer.ExportResult;
 import androidx.media3.transformer.ProgressHolder;
 import androidx.media3.transformer.Transformer;
+import com.google.common.util.concurrent.ListenableFuture;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -97,6 +99,8 @@ public class DroidVideoRecorder {
     private static RecordedVideoListener activeCameraXRecordedListener;
     private static DirectRecordingLifecycleOwner directRecordingLifecycleOwner;
     private static ProcessCameraProvider cameraXProvider;
+    private static boolean cameraXSessionReady;
+    private static int cameraXSessionGeneration;
 
     public interface RecordedVideoListener {
         void OnRecordedVideoReady(RecordedVideo video);
@@ -894,6 +898,33 @@ public class DroidVideoRecorder {
         ResetRecord(false, null);
     }
 
+    public static void ReleaseForServiceStop() {
+        try {
+            if (activeCameraXRecording != null
+                    || activeCameraXVideoCapture != null
+                    || activeCameraXFinalizeLatch != null) {
+                StopActiveCameraXRecording(false, null);
+            } else {
+                StopCameraXSession();
+            }
+        } catch (Exception ex) {
+            LogException("CameraXRecording", ex);
+        }
+
+        try {
+            ResetRecord(false, null);
+        } catch (Exception ex) {
+            LogException("StopRecording", ex);
+        }
+
+        CloseCurrentVideoFile();
+        ClearCurrentVideoState();
+        currentPreviewWidth = 0;
+        currentPreviewHeight = 0;
+        currentCameraId = -1;
+        mediaRecorderStarted = false;
+    }
+
     public static boolean OnStartDirectSelfiePreview(SurfaceTexture previewTexture,
                                                      Runnable previewSizeReadyCallback) {
         if (appContext == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || previewTexture == null) {
@@ -922,9 +953,13 @@ public class DroidVideoRecorder {
             if (activeCameraXRecording != null) {
                 StopActiveCameraXRecording(false, null);
             }
-            if (activeCameraXVideoCapture == null) {
+            if (activeCameraXVideoCapture == null || !cameraXSessionReady) {
                 ReleaseLegacyPreviewCamera();
                 StartCameraXSession(previewTexture, previewSizeReadyCallback);
+                if (!cameraXSessionReady) {
+                    StopCameraXSession();
+                    return false;
+                }
             }
 
             String displayName = NameFileDateNow();
@@ -958,6 +993,8 @@ public class DroidVideoRecorder {
 
     private static void StartCameraXSession(SurfaceTexture previewTexture,
                                             Runnable previewSizeReadyCallback) throws Exception {
+        final int sessionGeneration = ++cameraXSessionGeneration;
+        cameraXSessionReady = false;
         QualitySelector qualitySelector = QualitySelector.fromOrderedList(
                 Arrays.asList(Quality.UHD, Quality.FHD, Quality.HD, Quality.SD),
                 FallbackStrategy.lowerQualityOrHigherThan(Quality.SD));
@@ -987,27 +1024,33 @@ public class DroidVideoRecorder {
                 });
             }
 
-        if (directRecordingLifecycleOwner == null) {
-            directRecordingLifecycleOwner = new DirectRecordingLifecycleOwner();
-        }
-        directRecordingLifecycleOwner.Start();
+        ListenableFuture<ProcessCameraProvider> providerFuture =
+                ProcessCameraProvider.getInstance(appContext);
+        providerFuture.addListener(() -> {
+            if (sessionGeneration != cameraXSessionGeneration) {
+                return;
+            }
 
-        ProcessCameraProvider provider = GetCameraXProvider();
-        provider.unbindAll();
-        provider.bindToLifecycle(
-                directRecordingLifecycleOwner,
-                CameraSelector.DEFAULT_FRONT_CAMERA,
-                preview,
-                activeCameraXVideoCapture);
-        cameraXProvider = provider;
-    }
+            try {
+                if (directRecordingLifecycleOwner == null) {
+                    directRecordingLifecycleOwner = new DirectRecordingLifecycleOwner();
+                }
+                directRecordingLifecycleOwner.Start();
 
-    private static ProcessCameraProvider GetCameraXProvider() throws Exception {
-        if (cameraXProvider != null) {
-            return cameraXProvider;
-        }
-
-        return ProcessCameraProvider.getInstance(appContext).get(5, TimeUnit.SECONDS);
+                ProcessCameraProvider provider = providerFuture.get();
+                provider.unbindAll();
+                provider.bindToLifecycle(
+                        directRecordingLifecycleOwner,
+                        CameraSelector.DEFAULT_FRONT_CAMERA,
+                        preview,
+                        activeCameraXVideoCapture);
+                cameraXProvider = provider;
+                cameraXSessionReady = true;
+            } catch (Exception ex) {
+                LogException("CameraXPreview", ex);
+                StopCameraXSession();
+            }
+        }, ContextCompat.getMainExecutor(appContext));
     }
 
     private static void HandleCameraXRecordEvent(VideoRecordEvent event, String displayName) {
@@ -1076,6 +1119,8 @@ public class DroidVideoRecorder {
         activeCameraXRecordedVideo = null;
         activeCameraXRecordedListener = null;
         mediaRecorderStarted = false;
+        cameraXSessionReady = false;
+        cameraXSessionGeneration++;
 
         try {
             if (cameraXProvider != null) {
@@ -1084,6 +1129,7 @@ public class DroidVideoRecorder {
         } catch (Exception ex) {
             LogException("CameraXRecording", ex);
         }
+        cameraXProvider = null;
 
         if (directRecordingLifecycleOwner != null) {
             directRecordingLifecycleOwner.Stop();

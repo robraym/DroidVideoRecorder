@@ -91,6 +91,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     private boolean settingsTargetHighlighted;
     private boolean closingFromTrash;
     private boolean resizeBubbleIndicatorActive;
+    private boolean serviceResourcesReleased;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private PalmGestureDetector palmGestureDetector;
     private boolean palmCountdownActive;
@@ -237,6 +238,16 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         Log.d("DVR", "DroidHeadService onStartCommand");
+        if (serviceResourcesReleased) {
+            context = getBaseContext();
+            DroidVideoRecorder.TypeViewCam = DroidPrefsUtils.obtemUltimaCamera(context);
+            serviceActive = true;
+            activeService = new WeakReference<>(this);
+            serviceResourcesReleased = false;
+            StartForegroundServiceNotification();
+            InicializarVariavel();
+            InicializarAcao();
+        }
         return START_STICKY;
     }
 
@@ -265,23 +276,57 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     @Override
     public void onDestroy() {
         Log.d("DVR", "DroidHeadService onDestroy");
+        ReleaseServiceResources();
+        super.onDestroy();
+    }
+
+    private void ReleaseServiceResources() {
+        if (serviceResourcesReleased) {
+            return;
+        }
+        serviceResourcesReleased = true;
         serviceActive = false;
         if (activeService.get() == this) {
             activeService.clear();
         }
-        super.onDestroy();
-        DroidVideoRecorder.OnStopRecording(false);
-        if (touchTarget != null) windowManager.removeView(touchTarget);
-        if (chatHead != null) windowManager.removeView(chatHead);
-        if (txtHead != null) windowManager.removeView(txtHead);
-        if (txtCameraBadge != null) windowManager.removeView(txtCameraBadge);
-        if (mSurfaceView != null) windowManager.removeView(mSurfaceView);
-        if (readyPreviewView != null) windowManager.removeView(readyPreviewView);
-        if (trashTarget != null) windowManager.removeView(trashTarget);
-        if (settingsTarget != null) windowManager.removeView(settingsTarget);
-        if (palmGestureDetector != null) palmGestureDetector.Close();
-        if (sensorManager != null) sensorManager.unregisterListener(this);
+        CancelPalmRecordingCountdown();
+        PausePalmGestureDetection();
+        DroidVideoRecorder.ReleaseForServiceStop();
+        RemoveOverlayView(touchTarget);
+        RemoveOverlayView(chatHead);
+        RemoveOverlayView(txtHead);
+        RemoveOverlayView(txtCameraBadge);
+        RemoveOverlayView(mSurfaceView);
+        RemoveOverlayView(readyPreviewView);
+        RemoveOverlayView(trashTarget);
+        RemoveOverlayView(settingsTarget);
+        if (palmGestureDetector != null) {
+            palmGestureDetector.Close();
+            palmGestureDetector = null;
+        }
+        if (sensorManager != null) {
+            try {
+                sensorManager.unregisterListener(this);
+            } catch (Exception ignored) {
+            }
+            sensorManager = null;
+        }
+        if (tts != null) {
+            tts.shutdown();
+            tts = null;
+        }
         Vibrar(100);
+    }
+
+    private void RemoveOverlayView(View view) {
+        if (view == null || windowManager == null) {
+            return;
+        }
+
+        try {
+            windowManager.removeView(view);
+        } catch (Exception ignored) {
+        }
     }
 
     public static boolean IsActive() {
@@ -646,14 +691,18 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
 
     private void StopService() {
         DroidConfigurationActivity.CloseIfOpen();
+        ReleaseServiceResources();
         stopSelf();
-        tts.shutdown();
     }
 
     public static void StopForVideoReview() {
         DroidHeadService service = activeService.get();
         if (service != null) {
-            service.mainHandler.post(service::StopService);
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                service.StopService();
+            } else {
+                service.mainHandler.post(service::StopService);
+            }
         }
     }
 
