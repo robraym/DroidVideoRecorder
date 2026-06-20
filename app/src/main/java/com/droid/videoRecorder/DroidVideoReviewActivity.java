@@ -404,7 +404,7 @@ public class DroidVideoReviewActivity extends Activity {
         closeButton.setOnClickListener(v -> {
             if (!enhancingVideo) {
                 LogReviewEvent("close button clicked");
-                finish();
+                ShowCloseConfirmation();
             }
         });
         FrameLayout.LayoutParams closeParams = new FrameLayout.LayoutParams(dp(42), dp(42),
@@ -862,13 +862,36 @@ public class DroidVideoReviewActivity extends Activity {
             return;
         }
 
+        ShowReviewConfirmation(
+                R.string.revisao_video_confirmar_apagar_titulo,
+                R.string.revisao_video_confirmar_apagar_mensagem,
+                R.string.revisao_video_mover_lixeira,
+                "delete confirmation accepted",
+                this::MoveVideoToTrash);
+    }
+
+    private void ShowCloseConfirmation() {
+        if (enhancingVideo) {
+            return;
+        }
+
+        ShowReviewConfirmation(
+                R.string.revisao_video_confirmar_fechar_titulo,
+                R.string.revisao_video_confirmar_fechar_mensagem,
+                R.string.revisao_video_fechar,
+                "close confirmation accepted",
+                this::finish);
+    }
+
+    private void ShowReviewConfirmation(int titleRes, int messageRes, int actionRes,
+                                        String actionEvent, Runnable action) {
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(dp(24), dp(22), dp(24), dp(18));
         content.setBackground(CreateRounded(Color.rgb(28, 29, 33), dp(26)));
 
         TextView title = new TextView(this);
-        title.setText(getString(R.string.revisao_video_confirmar_apagar_titulo));
+        title.setText(getString(titleRes));
         title.setTextColor(Color.rgb(244, 246, 250));
         title.setTextSize(18);
         title.setTypeface(Typeface.DEFAULT_BOLD);
@@ -876,7 +899,7 @@ public class DroidVideoReviewActivity extends Activity {
         content.addView(title);
 
         TextView message = new TextView(this);
-        message.setText(getString(R.string.revisao_video_confirmar_apagar_mensagem));
+        message.setText(getString(messageRes));
         message.setTextColor(Color.rgb(166, 171, 183));
         message.setTextSize(13);
         message.setGravity(Gravity.LEFT);
@@ -891,14 +914,14 @@ public class DroidVideoReviewActivity extends Activity {
 
         TextView cancel = CreateDialogButton(getString(R.string.revisao_video_cancelar),
                 Color.rgb(48, 50, 58), Color.rgb(226, 229, 236));
-        TextView move = CreateDialogButton(getString(R.string.revisao_video_mover_lixeira),
+        TextView confirm = CreateDialogButton(getString(actionRes),
                 Color.rgb(45, 108, 223), Color.WHITE);
 
         LinearLayout.LayoutParams cancelParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, dp(44));
         cancelParams.setMargins(0, 0, dp(10), 0);
         actions.addView(cancel, cancelParams);
-        actions.addView(move, new LinearLayout.LayoutParams(
+        actions.addView(confirm, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, dp(44)));
         content.addView(actions);
 
@@ -906,9 +929,10 @@ public class DroidVideoReviewActivity extends Activity {
                 .setView(content)
                 .create();
         cancel.setOnClickListener(v -> dialog.dismiss());
-        move.setOnClickListener(v -> {
+        confirm.setOnClickListener(v -> {
             dialog.dismiss();
-            MoveVideoToTrash();
+            LogReviewEvent(actionEvent);
+            action.run();
         });
         dialog.setOnShowListener(dialogInterface -> {
             Window window = dialog.getWindow();

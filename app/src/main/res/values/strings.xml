@@ -38,6 +38,8 @@
     <string name="revisao_video_compartilhar_com">Share video</string>
     <string name="revisao_video_confirmar_apagar_titulo">Move video to trash?</string>
     <string name="revisao_video_confirmar_apagar_mensagem">You can restore it from the gallery while it is in trash.</string>
+    <string name="revisao_video_confirmar_fechar_titulo">Close video review?</string>
+    <string name="revisao_video_confirmar_fechar_mensagem">The recording will stay saved and the floating button will return.</string>
     <string name="revisao_video_cancelar">Cancel</string>
     <string name="txt_gravacao_videos">Save videos to</string>
     <string name="txt_local_gravacao_videos">Camera</string>
