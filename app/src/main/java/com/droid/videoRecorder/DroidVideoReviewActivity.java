@@ -14,6 +14,7 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
 import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
@@ -712,18 +713,74 @@ public class DroidVideoReviewActivity extends Activity {
             return;
         }
 
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(24), dp(22), dp(24), dp(18));
+        content.setBackground(CreateRounded(Color.rgb(28, 29, 33), dp(26)));
+
+        TextView title = new TextView(this);
+        title.setText(getString(R.string.revisao_video_confirmar_apagar_titulo));
+        title.setTextColor(Color.rgb(244, 246, 250));
+        title.setTextSize(18);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setGravity(Gravity.LEFT);
+        content.addView(title);
+
+        TextView message = new TextView(this);
+        message.setText(getString(R.string.revisao_video_confirmar_apagar_mensagem));
+        message.setTextColor(Color.rgb(166, 171, 183));
+        message.setTextSize(13);
+        message.setGravity(Gravity.LEFT);
+        message.setLineSpacing(dp(2), 1f);
+        message.setPadding(0, dp(8), 0, 0);
+        content.addView(message);
+
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        actions.setGravity(Gravity.RIGHT);
+        actions.setPadding(0, dp(20), 0, 0);
+
+        TextView cancel = CreateDialogButton(getString(R.string.revisao_video_cancelar),
+                Color.rgb(48, 50, 58), Color.rgb(226, 229, 236));
+        TextView move = CreateDialogButton(getString(R.string.revisao_video_mover_lixeira),
+                Color.rgb(45, 108, 223), Color.WHITE);
+
+        LinearLayout.LayoutParams cancelParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, dp(44));
+        cancelParams.setMargins(0, 0, dp(10), 0);
+        actions.addView(cancel, cancelParams);
+        actions.addView(move, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, dp(44)));
+        content.addView(actions);
+
         AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle(getString(R.string.revisao_video_confirmar_apagar_titulo))
-                .setMessage(getString(R.string.revisao_video_confirmar_apagar_mensagem))
-                .setNegativeButton(getString(R.string.revisao_video_cancelar), null)
-                .setPositiveButton(getString(R.string.revisao_video_mover_lixeira), (dialogInterface, which) -> MoveVideoToTrash())
+                .setView(content)
                 .create();
+        cancel.setOnClickListener(v -> dialog.dismiss());
+        move.setOnClickListener(v -> {
+            dialog.dismiss();
+            MoveVideoToTrash();
+        });
         dialog.setOnShowListener(dialogInterface -> {
-            dialog.getWindow().setBackgroundDrawable(CreateRounded(Color.rgb(34, 35, 39), dp(22)));
-            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(Color.rgb(190, 193, 201));
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(Color.rgb(232, 65, 72));
+            Window window = dialog.getWindow();
+            if (window != null) {
+                window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            }
         });
         dialog.show();
+    }
+
+    private TextView CreateDialogButton(String text, int backgroundColor, int textColor) {
+        TextView button = new TextView(this);
+        button.setText(text);
+        button.setTextColor(textColor);
+        button.setTextSize(14);
+        button.setTypeface(Typeface.DEFAULT_BOLD);
+        button.setGravity(Gravity.CENTER);
+        button.setMinWidth(dp(104));
+        button.setPadding(dp(18), 0, dp(18), 0);
+        button.setBackground(CreateRounded(backgroundColor, dp(22)));
+        return button;
     }
 
     private void MoveVideoToTrash() {

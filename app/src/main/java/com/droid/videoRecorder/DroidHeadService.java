@@ -1768,8 +1768,8 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         trashTarget.setAlpha(1f);
         trashTarget.animate().cancel();
         trashTarget.animate()
-                .scaleX(1.12f)
-                .scaleY(1.12f)
+                .scaleX(1.06f)
+                .scaleY(1.06f)
                 .rotation(0f)
                 .setDuration(120)
                 .setInterpolator(new OvershootInterpolator(1.2f))
@@ -1806,7 +1806,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
                 .scaleY(0.08f)
                 .alpha(0f)
                 .rotation(34f)
-                .setDuration(430)
+                .setDuration(680)
                 .setInterpolator(new AccelerateInterpolator())
                 .setListener(finishAfterAnimation ? new AnimatorListenerAdapter() {
                     @Override
@@ -1818,8 +1818,27 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     }
 
     private void AnimateTrashEvaporationAndStop() {
+        trashTarget.SetClosingOnlyTrash(true);
+        trashTarget.animate().cancel();
+        trashTarget.animate()
+                .scaleX(1.32f)
+                .scaleY(1.13f)
+                .alpha(1f)
+                .rotation(0f)
+                .setDuration(360)
+                .setInterpolator(new OvershootInterpolator(1.5f))
+                .withEndAction(new Runnable() {
+                    @Override
+                    public void run() {
+                        BeginTrashEvaporationAndStop();
+                    }
+                })
+                .start();
+    }
+
+    private void BeginTrashEvaporationAndStop() {
         final ValueAnimator evaporation = ValueAnimator.ofFloat(0f, 1f);
-        evaporation.setDuration(520);
+        evaporation.setDuration(760);
         evaporation.setInterpolator(new DecelerateInterpolator());
         evaporation.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
             @Override
@@ -1831,11 +1850,11 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
 
         trashTarget.animate().cancel();
         trashTarget.animate()
-                .scaleX(1.18f)
-                .scaleY(1.18f)
+                .scaleX(1.72f)
+                .scaleY(1.42f)
                 .alpha(0f)
                 .rotation(0f)
-                .setDuration(520)
+                .setDuration(760)
                 .setInterpolator(new DecelerateInterpolator())
                 .setListener(new AnimatorListenerAdapter() {
                     @Override
@@ -2034,7 +2053,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         private void StartPulse() {
             StopPulse();
             pulseAnimator = ValueAnimator.ofFloat(0f, 1f);
-            pulseAnimator.setDuration(920);
+            pulseAnimator.setDuration(1450);
             pulseAnimator.setRepeatCount(ValueAnimator.INFINITE);
             pulseAnimator.setInterpolator(new LinearInterpolator());
             pulseAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
@@ -2102,7 +2121,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         }
 
         private void DrawGearIcon(Canvas canvas, float centerX, float centerY) {
-            float rotation = highlighted ? highlightPulse * 28f : 0f;
+            float rotation = highlighted ? highlightPulse * 360f : 0f;
             float outerRadius = dp(29);
             float innerRadius = dp(22);
 
@@ -2125,9 +2144,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             paint.reset();
             paint.setAntiAlias(true);
             paint.setStyle(Paint.Style.FILL);
-            paint.setColor(highlighted
-                    ? Color.rgb(132, 188, 255)
-                    : Color.rgb(224, 231, 239));
+            paint.setColor(Color.rgb(224, 231, 239));
             canvas.drawPath(path, paint);
 
             paint.setColor(Color.rgb(45, 50, 58));
@@ -2138,6 +2155,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             canvas.drawCircle(centerX, centerY, dp(11), paint);
             canvas.restore();
         }
+
     }
 
     private class TrashTargetView extends View {
@@ -2147,6 +2165,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         private boolean highlighted;
         private float evaporationProgress;
         private float highlightPulse;
+        private boolean closingOnlyTrash;
         private ValueAnimator pulseAnimator;
 
         public TrashTargetView(Context context) {
@@ -2174,12 +2193,18 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             invalidate();
         }
 
+        public void SetClosingOnlyTrash(boolean closingOnlyTrash) {
+            this.closingOnlyTrash = closingOnlyTrash;
+            invalidate();
+        }
+
         public void ResetAnimationState() {
             setAlpha(1f);
             setScaleX(1f);
             setScaleY(1f);
             setRotation(0f);
             StopPulse();
+            SetClosingOnlyTrash(false);
             SetEvaporationProgress(0f);
             SetHighlighted(false);
         }
@@ -2217,7 +2242,9 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             float centerY = height / 2f + dp(3);
             float alphaMultiplier = 1f - evaporationProgress;
 
-            DrawTargetCard(canvas, width, height, alphaMultiplier);
+            if (!closingOnlyTrash) {
+                DrawTargetCard(canvas, width, height, alphaMultiplier);
+            }
             if (evaporationProgress < 0.78f) {
                 DrawTrashIcon(canvas, centerX, centerY, alphaMultiplier);
             }
@@ -2313,7 +2340,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             float lidY = centerY - dp(16);
             float lidPivotX = centerX - dp(28);
             float lidPivotY = lidY + dp(6);
-            float openAngle = highlighted ? -30f - highlightPulse * 4f : -2f;
+            float openAngle = highlighted ? -42f - highlightPulse * 6f : -2f;
             canvas.save();
             canvas.rotate(openAngle, lidPivotX, lidPivotY);
             paint.setStyle(Paint.Style.FILL);
@@ -2342,13 +2369,29 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             paint.reset();
             paint.setAntiAlias(true);
             paint.setStyle(Paint.Style.FILL);
-            int color = Color.rgb(236, 241, 247);
-            for (int i = 0; i < 4; i++) {
-                float seed = i / 3f;
-                float wave = (float) Math.sin((highlightPulse + seed) * Math.PI * 2f);
-                float x = centerX + (seed - 0.5f) * width * 0.36f + wave * dp(2);
-                float y = centerY - dp(42 + i % 2 * 5) - highlightPulse * dp(4);
-                DrawDust(canvas, x, y, dp(1), color, 95);
+            int[] colors = new int[]{
+                    Color.rgb(245, 249, 252),
+                    Color.rgb(180, 215, 255),
+                    Color.rgb(222, 233, 242)
+            };
+            float mouthX = centerX;
+            float mouthY = centerY - dp(17);
+            for (int i = 0; i < 22; i++) {
+                float seed = i / 21f;
+                float phase = (highlightPulse + seed * 0.74f) % 1f;
+                float side = i % 2 == 0 ? -1f : 1f;
+                float startX = centerX + side * (width * (0.50f + (i % 5) * 0.035f));
+                float startY = centerY - dp(52) + (i % 6) * dp(11);
+                float curve = (float) Math.sin(phase * Math.PI);
+                float x = startX + (mouthX - startX) * phase + side * curve * dp(8);
+                float y = startY + (mouthY - startY) * phase - curve * dp(12);
+                float size = dp(2 + (i % 3)) * (1.35f - phase * 0.45f);
+                int alpha = Math.max(40, (int) (230 * (1f - phase * 0.42f)));
+                if (i % 3 == 0) {
+                    DrawSpark(canvas, x, y, size + dp(2), colors[i % colors.length], alpha);
+                } else {
+                    DrawDust(canvas, x, y, size, colors[i % colors.length], alpha);
+                }
             }
         }
 
@@ -2358,21 +2401,25 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             }
             int[] colors = new int[]{
                     Color.rgb(236, 240, 244),
-                    Color.rgb(184, 196, 208),
-                    Color.rgb(214, 160, 150)
+                    Color.rgb(170, 205, 246),
+                    Color.rgb(214, 222, 232)
             };
-            for (int i = 0; i < 16; i++) {
-                float seed = i / 15f;
+            for (int i = 0; i < 28; i++) {
+                float seed = i / 27f;
                 float angle = (float) (seed * Math.PI * 2.2f + i * 0.41f);
-                float distance = dp(8) + evaporationProgress * dp(38 + (i % 6) * 4);
+                float distance = dp(8) + evaporationProgress * dp(48 + (i % 7) * 5);
                 float arc = (float) Math.sin(evaporationProgress * Math.PI);
                 float x = centerX + (float) Math.cos(angle) * distance * 0.72f;
                 float y = centerY + dp(8)
                         + (float) Math.sin(angle) * distance * 0.38f
-                        - evaporationProgress * dp(36)
-                        - arc * dp(8);
-                int alpha = Math.max(0, (int) (185 * (1f - evaporationProgress * 0.86f)));
-                DrawDust(canvas, x, y, dp(2), colors[i % colors.length], alpha);
+                        - evaporationProgress * dp(44)
+                        - arc * dp(12);
+                int alpha = Math.max(0, (int) (220 * (1f - evaporationProgress * 0.86f)));
+                if (i % 4 == 0) {
+                    DrawSpark(canvas, x, y, dp(3), colors[i % colors.length], alpha);
+                } else {
+                    DrawDust(canvas, x, y, dp(2), colors[i % colors.length], alpha);
+                }
             }
         }
 
@@ -2382,6 +2429,20 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             paint.setStyle(Paint.Style.FILL);
             paint.setColor(Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color)));
             canvas.drawCircle(centerX, centerY, Math.max(1f, size), paint);
+        }
+
+        private void DrawSpark(Canvas canvas, float centerX, float centerY, float size, int color, int alpha) {
+            paint.reset();
+            paint.setAntiAlias(true);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(Math.max(1f, size * 0.38f));
+            paint.setStrokeCap(Paint.Cap.ROUND);
+            paint.setColor(Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color)));
+            canvas.drawLine(centerX - size, centerY, centerX + size, centerY, paint);
+            canvas.drawLine(centerX, centerY - size, centerX, centerY + size, paint);
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(Color.argb(Math.min(255, alpha + 25), Color.red(color), Color.green(color), Color.blue(color)));
+            canvas.drawCircle(centerX, centerY, Math.max(1f, size * 0.28f), paint);
         }
     }
 
