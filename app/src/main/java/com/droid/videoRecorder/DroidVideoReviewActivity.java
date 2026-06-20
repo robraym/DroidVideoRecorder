@@ -22,6 +22,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.MediaStore;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewAnimationUtils;
@@ -97,6 +98,11 @@ public class DroidVideoReviewActivity extends Activity {
     private int revealCenterX;
     private int revealCenterY;
     private int revealRadius;
+    private boolean recorderRestoreRequested;
+    private boolean emergencyClosing;
+    private volatile boolean reviewWatchdogRunning;
+    private volatile boolean reviewWatchdogReported;
+    private volatile long lastReviewWatchdogBeat;
 
     private final Runnable progressUpdater = new Runnable() {
         @Override
@@ -150,7 +156,15 @@ public class DroidVideoReviewActivity extends Activity {
             return;
         }
 
-        DroidHeadService.StopForVideoReview();
+        LogReviewEvent("review create");
+        StartReviewWatchdog();
+        try {
+            LogReviewEvent("stop recorder for review start");
+            DroidHeadService.StopForVideoReview();
+            LogReviewEvent("stop recorder for review end");
+        } catch (Exception ex) {
+            LogReviewException("stop recorder for review failed", ex);
+        }
         BuildLayout();
         StartVideo();
     }
@@ -167,14 +181,107 @@ public class DroidVideoReviewActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        ReleasePlayer();
-        StartRecorderService();
+        LogReviewEvent("review destroy start");
+        if (!emergencyClosing) {
+            RequestRecorderRestore("review destroy");
+        }
+        ReleasePlayer("review destroy");
+        StopReviewWatchdog();
+        LogReviewEvent("review destroy end");
         super.onDestroy();
     }
 
-    private void StartRecorderService() {
-        Intent intentService = new Intent(this, DroidHeadService.class);
-        ContextCompat.startForegroundService(this, intentService);
+    private void RequestRecorderRestore(String reason) {
+        if (recorderRestoreRequested) {
+            return;
+        }
+
+        recorderRestoreRequested = true;
+        LogReviewEvent("restore recorder requested: " + reason);
+        try {
+            Intent intentService = new Intent(getApplicationContext(), DroidHeadService.class);
+            ContextCompat.startForegroundService(getApplicationContext(), intentService);
+            LogReviewEvent("restore recorder started");
+        } catch (Exception ex) {
+            LogReviewException("restore recorder failed", ex);
+            RequestEmergencyClose("Falha ao restaurar a bolinha depois da revisao", ex);
+        }
+    }
+
+    private void StartReviewWatchdog() {
+        reviewWatchdogRunning = true;
+        reviewWatchdogReported = false;
+        lastReviewWatchdogBeat = System.currentTimeMillis();
+        Thread watchdogThread = new Thread(() -> {
+            while (reviewWatchdogRunning) {
+                try {
+                    progressHandler.post(() -> lastReviewWatchdogBeat = System.currentTimeMillis());
+                } catch (Exception ignored) {
+                }
+
+                SleepWatchdog(2000);
+
+                long stalledFor = System.currentTimeMillis() - lastReviewWatchdogBeat;
+                if (reviewWatchdogRunning && !reviewWatchdogReported && stalledFor > 7000) {
+                    reviewWatchdogReported = true;
+                    DroidCrashReporter.LogEvent(
+                            getApplicationContext(),
+                            "Review: main thread stalled for " + stalledFor + "ms");
+                    DroidCrashReporter.SaveDiagnostic(
+                            getApplicationContext(),
+                            "Tela de revisao ficou sem resposta por " + stalledFor + "ms",
+                            null);
+                    ForceKillProcess();
+                }
+            }
+        }, "DVR-ReviewWatchdog");
+        watchdogThread.start();
+    }
+
+    private void StopReviewWatchdog() {
+        reviewWatchdogRunning = false;
+    }
+
+    private void SleepWatchdog(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException ignored) {
+        }
+    }
+
+    private void LogReviewEvent(String event) {
+        Log.d("DVR-Review", event);
+        DroidCrashReporter.LogEvent(getApplicationContext(), "Review: " + event);
+    }
+
+    private void LogReviewException(String event, Exception ex) {
+        String message = ex != null && ex.getMessage() != null ? ex.getMessage() : String.valueOf(ex);
+        Log.e("DVR-Review", event + ": " + message, ex);
+        DroidCrashReporter.LogEvent(getApplicationContext(), "Review: " + event + ": " + message);
+    }
+
+    private void RequestEmergencyClose(String reason, Throwable throwable) {
+        emergencyClosing = true;
+        LogReviewEvent("emergency close requested: " + reason);
+        DroidCrashReporter.SaveDiagnostic(getApplicationContext(), reason, throwable);
+        StopReviewWatchdog();
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                finishAndRemoveTask();
+            } else {
+                finish();
+            }
+        } catch (Exception ex) {
+            LogReviewException("finish emergency close failed", ex);
+        }
+
+        progressHandler.postDelayed(this::ForceKillProcess, 450);
+    }
+
+    private void ForceKillProcess() {
+        LogReviewEvent("force kill process");
+        android.os.Process.killProcess(android.os.Process.myPid());
+        System.exit(0);
     }
 
     @Override
@@ -186,9 +293,12 @@ public class DroidVideoReviewActivity extends Activity {
 
         if (resultCode == RESULT_OK) {
             deleted = true;
+            LogReviewEvent("trash request accepted");
+            RequestRecorderRestore("trash result ok");
             Toast.makeText(this, getString(R.string.revisao_video_movido_lixeira), Toast.LENGTH_SHORT).show();
             finish();
         } else {
+            LogReviewEvent("trash request canceled");
             StartVideo();
         }
     }
@@ -547,12 +657,14 @@ public class DroidVideoReviewActivity extends Activity {
     }
 
     private void StartVideo() {
+        LogReviewEvent("start video");
         PrepareVideo();
     }
 
     private void PrepareVideo() {
         try {
-            ReleasePlayer();
+            ReleasePlayer("prepare video");
+            LogReviewEvent("player build start");
             mediaPlayer = new ExoPlayer.Builder(this).build();
             videoView.setPlayer(mediaPlayer);
             Uri sourceUri = videoUri != null ? videoUri : Uri.fromFile(new File(videoPath));
@@ -585,26 +697,62 @@ public class DroidVideoReviewActivity extends Activity {
 
                 @Override
                 public void onPlayerError(PlaybackException error) {
+                    LogReviewException("player error", error);
                     Toast.makeText(DroidVideoReviewActivity.this, getString(R.string.revisao_video_erro), Toast.LENGTH_SHORT).show();
                     playing = false;
                     UpdatePlayState();
+                    RequestEmergencyClose("Erro no player da revisao", error);
                 }
             });
             mediaPlayer.prepare();
             mediaPlayer.play();
+            LogReviewEvent("player build end");
         } catch (Exception ex) {
+            LogReviewException("prepare video failed", ex);
             Toast.makeText(this, getString(R.string.revisao_video_erro), Toast.LENGTH_SHORT).show();
             playing = false;
             UpdatePlayState();
+            RequestEmergencyClose("Falha ao abrir o video na revisao", ex);
         }
     }
 
-    private void ReleasePlayer() {
+    private void ReleasePlayer(String reason) {
+        LogReviewEvent("release player start: " + reason);
         StopProgressUpdates();
-        if (mediaPlayer != null) {
-            videoView.setPlayer(null);
-            mediaPlayer.release();
-            mediaPlayer = null;
+        ExoPlayer player = mediaPlayer;
+        mediaPlayer = null;
+        playing = false;
+        if (player != null) {
+            try {
+                if (videoView != null) {
+                    videoView.setPlayer(null);
+                }
+            } catch (Exception ex) {
+                LogReviewException("detach player failed", ex);
+            }
+
+            try {
+                player.release();
+            } catch (Exception ex) {
+                LogReviewException("release player failed", ex);
+                RequestEmergencyClose("Falha ao liberar o player da revisao", ex);
+            }
+        }
+        LogReviewEvent("release player end: " + reason);
+    }
+
+    private void PausePlayer(String reason) {
+        if (mediaPlayer == null) {
+            return;
+        }
+
+        try {
+            LogReviewEvent("pause player: " + reason);
+            mediaPlayer.pause();
+            playing = false;
+            UpdatePlayState();
+        } catch (Exception ex) {
+            LogReviewException("pause player failed", ex);
         }
     }
 
@@ -794,9 +942,10 @@ public class DroidVideoReviewActivity extends Activity {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && videoUri != null) {
             try {
-                ReleasePlayer();
+                PausePlayer("move to trash");
                 if (MoveMediaStoreVideoToTrashDirectly()) {
                     deleted = true;
+                    RequestRecorderRestore("trash moved directly");
                     Toast.makeText(this, getString(R.string.revisao_video_movido_lixeira), Toast.LENGTH_SHORT).show();
                     finish();
                     return;
@@ -847,7 +996,7 @@ public class DroidVideoReviewActivity extends Activity {
 
         boolean success = false;
         try {
-            ReleasePlayer();
+            ReleasePlayer("delete permanently");
             if (videoUri != null) {
                 success = getContentResolver().delete(videoUri, null, null) > 0;
             } else if (videoPath != null) {
@@ -916,7 +1065,7 @@ public class DroidVideoReviewActivity extends Activity {
         if (audioMode) {
             PausePlayerForProcessing();
         } else {
-            ReleasePlayer();
+            ReleasePlayer("enhance video");
         }
         SetEnhancementState(true);
         DroidVideoRecorder.VideoEnhancementListener listener = new DroidVideoRecorder.VideoEnhancementListener() {
@@ -982,7 +1131,7 @@ public class DroidVideoReviewActivity extends Activity {
             return;
         }
 
-        ReleasePlayer();
+        ReleasePlayer("restore original video");
         DeleteEnhancedVideoIfPossible();
         videoUri = originalVideoUri;
         videoPath = originalVideoPath;
