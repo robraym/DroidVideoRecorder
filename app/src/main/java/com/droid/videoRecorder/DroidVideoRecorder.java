@@ -526,6 +526,7 @@ public class DroidVideoRecorder {
     }
 
     public static boolean ReduceAudioNoise(Context context, RecordedVideo video,
+                                           float attenuationDb,
                                            VideoEnhancementListener listener) {
         if (context != null) {
             SetContext(context);
@@ -545,7 +546,7 @@ public class DroidVideoRecorder {
             try {
                 audioVideoFile = File.createTempFile("DVR_voice_", ".mp4", appContext.getCacheDir());
                 Uri inputUri = video.uri != null ? video.uri : Uri.fromFile(new File(video.legacyPath));
-                DroidAudioNoiseReducer.Process(appContext, inputUri, audioVideoFile,
+                DroidAudioNoiseReducer.Process(appContext, inputUri, audioVideoFile, attenuationDb,
                         (percent, remainingSeconds) -> MIRROR_HANDLER.post(() ->
                                 listener.OnVideoEnhancementProgress(percent, remainingSeconds)));
                 if (video.uri != null) {

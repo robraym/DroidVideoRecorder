@@ -52,6 +52,9 @@ import java.io.File;
 import java.util.Collections;
 
 public class DroidVideoReviewActivity extends Activity {
+    private static final float AUDIO_NOISE_REDUCTION_SOFT_DB = 12f;
+    private static final float AUDIO_NOISE_REDUCTION_STANDARD_DB = 20f;
+    private static final float AUDIO_NOISE_REDUCTION_STRONG_DB = 35f;
     private static final String EXTRA_VIDEO_URI = "extra_video_uri";
     private static final String EXTRA_VIDEO_PATH = "extra_video_path";
     private static final String EXTRA_DISPLAY_NAME = "extra_display_name";
@@ -657,6 +660,13 @@ public class DroidVideoReviewActivity extends Activity {
         return drawable;
     }
 
+    private GradientDrawable CreateOval(int color) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setShape(GradientDrawable.OVAL);
+        drawable.setColor(color);
+        return drawable;
+    }
+
     private void StartVideo() {
         LogReviewEvent("start video");
         PrepareVideo();
@@ -1060,14 +1070,139 @@ public class DroidVideoReviewActivity extends Activity {
     }
 
     private void EnhanceVideo() {
-        ProcessVideoEnhancement(false);
+        ProcessVideoEnhancement(false, 0f);
     }
 
     private void ReduceAudioNoise() {
-        ProcessVideoEnhancement(true);
+        if (enhancingVideo || deleted) {
+            return;
+        }
+
+        LinearLayout dialogContent = new LinearLayout(this);
+        dialogContent.setOrientation(LinearLayout.VERTICAL);
+        dialogContent.setPadding(dp(22), dp(20), dp(22), dp(14));
+        dialogContent.setBackground(CreateRounded(Color.rgb(34, 35, 39), dp(24)));
+
+        TextView title = new TextView(this);
+        title.setText(getString(R.string.revisao_video_voz_intensidade_titulo));
+        title.setTextColor(Color.WHITE);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTextSize(20);
+        dialogContent.addView(title);
+
+        TextView summary = new TextView(this);
+        summary.setText(getString(R.string.revisao_video_voz_intensidade_resumo));
+        summary.setTextColor(Color.rgb(190, 193, 201));
+        summary.setTextSize(13);
+        summary.setPadding(0, dp(6), 0, dp(12));
+        dialogContent.addView(summary);
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setView(dialogContent)
+                .create();
+
+        dialogContent.addView(CreateAudioStrengthButton(
+                getString(R.string.revisao_video_voz_suave),
+                getString(R.string.revisao_video_voz_suave_resumo),
+                Color.rgb(28, 145, 96),
+                () -> {
+                    dialog.dismiss();
+                    ProcessVideoEnhancement(true, AUDIO_NOISE_REDUCTION_SOFT_DB);
+                }));
+        dialogContent.addView(CreateAudioStrengthButton(
+                getString(R.string.revisao_video_voz_padrao),
+                getString(R.string.revisao_video_voz_padrao_resumo),
+                Color.rgb(48, 118, 230),
+                () -> {
+                    dialog.dismiss();
+                    ProcessVideoEnhancement(true, AUDIO_NOISE_REDUCTION_STANDARD_DB);
+                }));
+        dialogContent.addView(CreateAudioStrengthButton(
+                getString(R.string.revisao_video_voz_forte),
+                getString(R.string.revisao_video_voz_forte_resumo),
+                Color.rgb(121, 88, 230),
+                () -> {
+                    dialog.dismiss();
+                    ProcessVideoEnhancement(true, AUDIO_NOISE_REDUCTION_STRONG_DB);
+                }));
+
+        TextView cancel = new TextView(this);
+        cancel.setText(getString(R.string.revisao_video_cancelar));
+        cancel.setTextColor(Color.rgb(190, 193, 201));
+        cancel.setGravity(Gravity.CENTER);
+        cancel.setTypeface(Typeface.DEFAULT_BOLD);
+        cancel.setTextSize(14);
+        cancel.setPadding(0, dp(14), 0, dp(4));
+        cancel.setOnClickListener(v -> dialog.dismiss());
+        dialogContent.addView(cancel, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        dialog.setOnShowListener(dialogInterface -> {
+            if (dialog.getWindow() != null) {
+                dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            }
+        });
+        dialog.show();
     }
 
-    private void ProcessVideoEnhancement(boolean audioMode) {
+    private View CreateAudioStrengthButton(String title, String summary, int iconColor, Runnable action) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(14), dp(12), dp(14), dp(12));
+        row.setBackground(CreateRounded(Color.rgb(45, 46, 52), dp(18)));
+        row.setOnClickListener(v -> action.run());
+
+        TextView icon = new TextView(this);
+        icon.setText("IA");
+        icon.setTextColor(Color.WHITE);
+        icon.setGravity(Gravity.CENTER);
+        icon.setTypeface(Typeface.DEFAULT_BOLD);
+        icon.setTextSize(12);
+        icon.setBackground(CreateOval(iconColor));
+        LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(38), dp(38));
+        iconParams.setMargins(0, 0, dp(14), 0);
+        row.addView(icon, iconParams);
+
+        LinearLayout texts = new LinearLayout(this);
+        texts.setOrientation(LinearLayout.VERTICAL);
+
+        TextView titleView = new TextView(this);
+        titleView.setText(title);
+        titleView.setTextColor(Color.rgb(248, 248, 250));
+        titleView.setTypeface(Typeface.DEFAULT_BOLD);
+        titleView.setTextSize(16);
+        texts.addView(titleView);
+
+        TextView summaryView = new TextView(this);
+        summaryView.setText(summary);
+        summaryView.setTextColor(Color.rgb(180, 182, 190));
+        summaryView.setTextSize(12);
+        summaryView.setPadding(0, dp(3), 0, 0);
+        texts.addView(summaryView);
+
+        row.addView(texts, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                1));
+
+        TextView arrow = new TextView(this);
+        arrow.setText(">");
+        arrow.setTextColor(Color.rgb(176, 179, 188));
+        arrow.setGravity(Gravity.CENTER);
+        arrow.setTextSize(18);
+        row.addView(arrow, new LinearLayout.LayoutParams(dp(24),
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        rowParams.setMargins(0, dp(6), 0, dp(6));
+        row.setLayoutParams(rowParams);
+        return row;
+    }
+
+    private void ProcessVideoEnhancement(boolean audioMode, float audioAttenuationDb) {
         if (enhancingVideo || deleted) {
             return;
         }
@@ -1142,7 +1277,7 @@ public class DroidVideoReviewActivity extends Activity {
             }
         };
         boolean started = audioMode
-                ? DroidVideoRecorder.ReduceAudioNoise(this, video, listener)
+                ? DroidVideoRecorder.ReduceAudioNoise(this, video, audioAttenuationDb, listener)
                 : DroidVideoRecorder.EnhanceVideo(this, video, listener);
 
         if (!started) {

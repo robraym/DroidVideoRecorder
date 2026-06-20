@@ -18,6 +18,14 @@
     <string name="revisao_video_compartilhar">Share</string>
     <string name="revisao_video_melhorar">AI Video</string>
     <string name="revisao_video_voz">AI Audio</string>
+    <string name="revisao_video_voz_intensidade_titulo">AI Audio strength</string>
+    <string name="revisao_video_voz_intensidade_resumo">Choose how strongly Recorder should reduce background noise.</string>
+    <string name="revisao_video_voz_suave">Soft</string>
+    <string name="revisao_video_voz_suave_resumo">Preserves more of the voice</string>
+    <string name="revisao_video_voz_padrao">Standard</string>
+    <string name="revisao_video_voz_padrao_resumo">Balances voice and noise</string>
+    <string name="revisao_video_voz_forte">Strong</string>
+    <string name="revisao_video_voz_forte_resumo">Removes more background noise</string>
     <string name="revisao_video_restaurar">Restore</string>
     <string name="revisao_video_melhorando">Enhancing video</string>
     <string name="revisao_video_melhorando_resumo">Adjusting image</string>

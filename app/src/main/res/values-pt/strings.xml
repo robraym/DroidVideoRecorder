@@ -18,6 +18,14 @@
     <string name="revisao_video_compartilhar">Compartilhar</string>
     <string name="revisao_video_melhorar">IA Vídeo</string>
     <string name="revisao_video_voz">IA Áudio</string>
+    <string name="revisao_video_voz_intensidade_titulo">Intensidade do IA Áudio</string>
+    <string name="revisao_video_voz_intensidade_resumo">Escolha a força da redução de ruído do Recorder.</string>
+    <string name="revisao_video_voz_suave">Suave</string>
+    <string name="revisao_video_voz_suave_resumo">Preserva mais a voz</string>
+    <string name="revisao_video_voz_padrao">Padrão</string>
+    <string name="revisao_video_voz_padrao_resumo">Equilibra voz e ruído</string>
+    <string name="revisao_video_voz_forte">Forte</string>
+    <string name="revisao_video_voz_forte_resumo">Remove mais ruído de fundo</string>
     <string name="revisao_video_restaurar">Restaurar</string>
     <string name="revisao_video_melhorando">Melhorando vídeo</string>
     <string name="revisao_video_melhorando_resumo">Ajustando imagem</string>

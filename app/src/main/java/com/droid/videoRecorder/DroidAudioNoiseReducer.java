@@ -5,6 +5,7 @@ import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaExtractor;
 import android.media.MediaFormat;
+import android.media.MediaMetadataRetriever;
 import android.media.MediaMuxer;
 import android.net.Uri;
 import android.util.Log;
@@ -36,10 +37,9 @@ class DroidAudioNoiseReducer {
     private static final int OUTPUT_CHANNEL_COUNT = 1;
     private static final int BYTES_PER_SAMPLE = 2;
     private static final int DEEP_FILTER_MODEL_TIMEOUT_SECONDS = 12;
-    private static final float DEEP_FILTER_ATTENUATION_DB = 35f;
     private static final String TAG = "AudioNoiseReducer";
 
-    static void Process(Context context, Uri inputUri, File outputFile,
+    static void Process(Context context, Uri inputUri, File outputFile, float attenuationDb,
                         ProgressListener progressListener) throws Exception {
         MediaExtractor videoExtractor = null;
         MediaExtractor audioExtractor = null;
@@ -58,13 +58,14 @@ class DroidAudioNoiseReducer {
             }
             MediaFormat videoFormat = videoExtractor.getTrackFormat(videoTrackIndex);
             Log.d(TAG, "Video track format: " + videoFormat);
+            int videoRotation = GetVideoRotation(context, inputUri);
 
             audioExtractor = new MediaExtractor();
             audioExtractor.setDataSource(context, inputUri, null);
             int audioTrackIndex = FindTrack(audioExtractor, "audio/");
             if (audioTrackIndex < 0) {
                 Log.d(TAG, "No audio track found. Copying video only.");
-                CopyVideoOnly(videoExtractor, videoTrackIndex, videoFormat, outputFile);
+                CopyVideoOnly(videoExtractor, videoTrackIndex, videoFormat, outputFile, videoRotation);
                 NotifyProgress(progressListener, 100, 0);
                 return;
             }
@@ -89,11 +90,13 @@ class DroidAudioNoiseReducer {
                     + ", channelCount=" + channelCount
                     + ", durationUs=" + durationUs);
 
-            noiseSuppressor = NeuralNoiseSuppressor.Create(context.getApplicationContext());
+            Log.d(TAG, "Audio noise reduction attenuation: " + attenuationDb + " dB");
+            noiseSuppressor = NeuralNoiseSuppressor.Create(context.getApplicationContext(), attenuationDb);
             AudioPipeline audioPipeline = new AudioPipeline(noiseSuppressor, sampleRate, channelCount);
             AudioPtsTracker audioPtsTracker = new AudioPtsTracker();
 
             muxer = new MediaMuxer(outputFile.getAbsolutePath(), MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+            SetMuxerOrientation(muxer, videoRotation);
             int muxerVideoTrackIndex = muxer.addTrack(videoFormat);
 
             MediaFormat outputAudioFormat = MediaFormat.createAudioFormat(
@@ -267,10 +270,49 @@ class DroidAudioNoiseReducer {
         return -1;
     }
 
+    private static int GetVideoRotation(Context context, Uri inputUri) {
+        MediaMetadataRetriever retriever = new MediaMetadataRetriever();
+        try {
+            retriever.setDataSource(context, inputUri);
+            String rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION);
+            if (rotation == null || rotation.length() == 0) {
+                return 0;
+            }
+            return NormalizeRotation(Integer.parseInt(rotation));
+        } catch (Exception ex) {
+            Log.d(TAG, "Could not read video rotation: " + ex);
+            return 0;
+        } finally {
+            try {
+                retriever.release();
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private static int NormalizeRotation(int rotation) {
+        int normalized = ((rotation % 360) + 360) % 360;
+        return normalized == 90 || normalized == 180 || normalized == 270 ? normalized : 0;
+    }
+
+    private static void SetMuxerOrientation(MediaMuxer muxer, int rotation) {
+        if (rotation == 0) {
+            return;
+        }
+
+        try {
+            muxer.setOrientationHint(rotation);
+        } catch (Exception ex) {
+            Log.d(TAG, "Could not set video rotation: " + ex);
+        }
+    }
+
     private static void CopyVideoOnly(MediaExtractor extractor, int videoTrackIndex,
-                                      MediaFormat videoFormat, File outputFile) throws Exception {
+                                      MediaFormat videoFormat, File outputFile,
+                                      int videoRotation) throws Exception {
         MediaMuxer muxer = new MediaMuxer(outputFile.getAbsolutePath(), MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
         try {
+            SetMuxerOrientation(muxer, videoRotation);
             int muxerVideoTrack = muxer.addTrack(videoFormat);
             muxer.start();
             CopyVideoTrack(extractor, videoTrackIndex, muxer, muxerVideoTrack);
@@ -408,11 +450,11 @@ class DroidAudioNoiseReducer {
         private int pendingSize = 0;
         private int processedFrameCount = 0;
 
-        static NeuralNoiseSuppressor Create(Context context) throws Exception {
+        static NeuralNoiseSuppressor Create(Context context, float attenuationDb) throws Exception {
             Log.d(TAG, "Loading DeepFilterNet model");
             NativeDeepFilterNet model = new NativeDeepFilterNet(
                     context,
-                    DEEP_FILTER_ATTENUATION_DB,
+                    attenuationDb,
                     StandardDispatchers.INSTANCE,
                     new DefaultDeepFilterModelLoader());
             CountDownLatch modelLoadedLatch = new CountDownLatch(1);
@@ -437,7 +479,7 @@ class DroidAudioNoiseReducer {
                 throw new IllegalStateException("Modelo neural de audio nao carregou");
             }
 
-            model.setAttenuationLimit(DEEP_FILTER_ATTENUATION_DB);
+            model.setAttenuationLimit(attenuationDb);
             Log.d(TAG, "DeepFilterNet ready: frameLength=" + model.getFrameLength());
             return new NeuralNoiseSuppressor(model, (int) model.getFrameLength());
         }
