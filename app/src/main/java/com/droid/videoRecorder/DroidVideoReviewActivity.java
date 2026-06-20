@@ -403,6 +403,7 @@ public class DroidVideoReviewActivity extends Activity {
         closeButton.setBackground(CreateRounded(Color.rgb(54, 56, 64), dp(21)));
         closeButton.setOnClickListener(v -> {
             if (!enhancingVideo) {
+                LogReviewEvent("close button clicked");
                 finish();
             }
         });
@@ -964,10 +965,12 @@ public class DroidVideoReviewActivity extends Activity {
                         0);
                 return;
             } catch (IntentSender.SendIntentException ex) {
+                LogReviewException("trash request failed", ex);
                 StartVideo();
                 Toast.makeText(this, getString(R.string.revisao_video_erro), Toast.LENGTH_SHORT).show();
                 return;
-            } catch (Exception ignored) {
+            } catch (Exception ex) {
+                LogReviewException("move to trash failed", ex);
             }
         }
 
@@ -983,7 +986,8 @@ public class DroidVideoReviewActivity extends Activity {
             ContentValues values = new ContentValues();
             values.put(MediaStore.MediaColumns.IS_TRASHED, 1);
             return getContentResolver().update(videoUri, values, null, null) > 0;
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            LogReviewException("direct trash failed", ex);
             return false;
         }
     }
