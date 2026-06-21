@@ -691,6 +691,10 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
 
     private void StopService() {
         DroidConfigurationActivity.CloseIfOpen();
+        StopServiceWithoutClosingConfiguration();
+    }
+
+    private void StopServiceWithoutClosingConfiguration() {
         ReleaseServiceResources();
         stopSelf();
     }
@@ -726,6 +730,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     private void AbrirConfig() {
         Fala(getString(R.string.abrindoDVRConfig));
         ShowActivity();
+        StopServiceWithoutClosingConfiguration();
     }
 
     private void Gravar() {
@@ -818,26 +823,9 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         CancelPalmRecordingCountdown();
         PausePalmGestureDetection();
         HideCameraIndicator();
-        boolean directSelfieRecording = DroidVideoRecorder.ShouldUseDirectSelfieRecording(context);
         ShowRecordingPreview(true);
         SetPreviewFullScreen(false);
-        boolean recordingStarted;
-
-        if (directSelfieRecording) {
-            SurfaceTexture previewTexture = Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
-                    && readyPreviewView != null
-                    && readyPreviewView.isAvailable()
-                    ? readyPreviewView.getSurfaceTexture()
-                    : null;
-            recordingStarted = DroidVideoRecorder.OnStartDirectSelfieRecording(
-                    previewTexture,
-                    () -> {
-                        SetPreviewBubble();
-                        mainHandler.postDelayed(this::ApplyPreviewTransform, 150);
-                    });
-        } else {
-            recordingStarted = false;
-        }
+        boolean recordingStarted = false;
 
         if (!recordingStarted) {
             ShowRecordingPreview(true);
@@ -1445,6 +1433,10 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     }
 
     private void ShowTrashTarget() {
+        if (!CanUseDragTargets()) {
+            return;
+        }
+
         trashDragActive = true;
         trashTarget.animate().cancel();
         trashTarget.ResetAnimationState();
@@ -1482,6 +1474,18 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
                 })
                 .start();
         HideSettingsTarget();
+    }
+
+    private void HideTrashTargetImmediately() {
+        trashDragActive = false;
+        trashTargetHighlighted = false;
+        if (trashTarget == null) {
+            return;
+        }
+        trashTarget.animate().cancel();
+        trashTarget.SetHighlighted(false);
+        trashTarget.ResetAnimationState();
+        trashTarget.setVisibility(View.GONE);
     }
 
     private void UpdateTrashTarget(boolean highlighted) {
@@ -1542,6 +1546,17 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
                     }
                 })
                 .start();
+    }
+
+    private void HideSettingsTargetImmediately() {
+        settingsTargetHighlighted = false;
+        if (settingsTarget == null) {
+            return;
+        }
+        settingsTarget.animate().cancel();
+        settingsTarget.SetHighlighted(false);
+        settingsTarget.ResetAnimationState();
+        settingsTarget.setVisibility(View.GONE);
     }
 
     private void UpdateSettingsTarget(boolean highlighted) {
@@ -1676,7 +1691,17 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
                 + (distanceY * distanceY) / (radiusY * radiusY) <= 1f;
     }
 
+    private boolean CanUseDragTargets() {
+        return DroidVideoRecorder.StateRecVideo != DroidConstants.EnumStateRecVideo.RECORD;
+    }
+
     private void OpenSettingsFromTarget() {
+        if (!CanUseDragTargets()) {
+            HideTrashTargetImmediately();
+            HideSettingsTargetImmediately();
+            return;
+        }
+
         HideTrashTarget();
         RestoreBubbleDragAppearance();
         RestoreBubbleAppearance();
@@ -1685,18 +1710,19 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     }
 
     private void CloseFromTrashTarget() {
+        if (!CanUseDragTargets()) {
+            HideTrashTargetImmediately();
+            HideSettingsTargetImmediately();
+            return;
+        }
+
         if (closingFromTrash) {
             return;
         }
         closingFromTrash = true;
         trashDragActive = false;
         HideSettingsTarget();
-        if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.RECORD) {
-            Fala(getString(R.string.parandoGravacao));
-            ShowStopRecord(true);
-        } else {
-            Fala(getString(R.string.fechando));
-        }
+        Fala(getString(R.string.fechando));
         PlayTrashExitSound();
         AnimateTrashExitAndStop();
     }
@@ -1883,19 +1909,6 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         }
 
         pendingReadyPreview = false;
-        if (DroidVideoRecorder.ShouldUseDirectSelfieRecording(context)) {
-            readyPreviewView.setTransform(new Matrix());
-            boolean directPreviewStarted = DroidVideoRecorder.OnStartDirectSelfiePreview(
-                    readyPreviewView.getSurfaceTexture(),
-                    () -> {
-                        SetPreviewBubble();
-                        mainHandler.postDelayed(this::ApplyPreviewTransform, 150);
-                    });
-            if (directPreviewStarted) {
-                return;
-            }
-        }
-
         DroidVideoRecorder.OnInitRec(getResources().getConfiguration(), orientationEvent, pendingPreviewCam);
         ApplyPreviewTransform();
         DroidVideoRecorder.OnViewRec(readyPreviewView.getSurfaceTexture());
@@ -1938,6 +1951,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
 
         mItent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         mItent.putExtra(DroidConstants.CHAMADAPELOSERVICO, true);
+        mItent.putExtra(DroidConfigurationActivity.EXTRA_RESTORE_SERVICE_ON_CLOSE, true);
         startActivity(mItent);
     }
 
@@ -2550,6 +2564,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
                     }
                     return true;
                 case MotionEvent.ACTION_MOVE:
+                    boolean canUseDragTargets = CanUseDragTargets();
                     Integer totalMoveX = (int) (event.getRawX() - initialTouchX);
                     params.x = initialX + totalMoveX;
                     Integer totalMoveY = (int) (event.getRawY() - initialTouchY);
@@ -2558,7 +2573,9 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
                     touchParams.y = params.y;
                     if (!dragStarted && IsDragGesture(totalMoveX, totalMoveY)) {
                         dragStarted = true;
-                        ShowTrashTarget();
+                        if (canUseDragTargets) {
+                            ShowTrashTarget();
+                        }
                     }
                     windowManager.updateViewLayout(chatHead, params);
                     windowManager.updateViewLayout(txtHead, params);
@@ -2571,7 +2588,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
                         readyPreviewParams.y = params.y;
                         windowManager.updateViewLayout(readyPreviewView, readyPreviewParams);
                     }
-                    if (trashDragActive) {
+                    if (trashDragActive && canUseDragTargets) {
                         boolean pointerOverSettingsTarget = IsPointerOverSettingsTarget(event);
                         boolean pointerOverTrashTarget = IsPointerOverTrashTarget(event);
                         if (pointerOverSettingsTarget) {
@@ -2583,10 +2600,20 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
                         if (pointerOverSettingsTarget != settingsTargetHighlighted) {
                             UpdateSettingsTarget(pointerOverSettingsTarget);
                         }
+                    } else if (trashDragActive) {
+                        HideTrashTargetImmediately();
+                        HideSettingsTargetImmediately();
                     }
                     return true;
                 case MotionEvent.ACTION_UP:
                     if (trashDragActive) {
+                        if (!CanUseDragTargets()) {
+                            HideTrashTargetImmediately();
+                            HideSettingsTargetImmediately();
+                            singleFingerGestureAccepted = false;
+                            return true;
+                        }
+
                         boolean openSettings = settingsTargetHighlighted;
                         boolean closeApp = trashTargetHighlighted;
                         if (openSettings) {

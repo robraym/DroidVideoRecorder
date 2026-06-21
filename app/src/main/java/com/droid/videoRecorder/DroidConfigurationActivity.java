@@ -27,7 +27,6 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Switch;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
@@ -37,6 +36,7 @@ import java.util.List;
  * Created by Robson on 12/01/2016.
  */
 public class DroidConfigurationActivity extends Activity {
+    public static final String EXTRA_RESTORE_SERVICE_ON_CLOSE = "restoreServiceOnClose";
     private static final int REQUEST_RUNTIME_PERMISSIONS = 1001;
     private static WeakReference<DroidConfigurationActivity> activeActivity = new WeakReference<>(null);
 
@@ -51,6 +51,7 @@ public class DroidConfigurationActivity extends Activity {
     private boolean permissionFlowActive;
     private boolean runtimePermissionRequested;
     private boolean settingsScreenVisible;
+    private boolean restoreServiceOnClose;
     private static final int COLOR_BACKGROUND = Color.rgb(0, 0, 0);
     private static final int COLOR_GROUP = Color.rgb(28, 29, 33);
     private static final int COLOR_PRIMARY_TEXT = Color.rgb(248, 248, 250);
@@ -79,6 +80,7 @@ public class DroidConfigurationActivity extends Activity {
         boolean exibeTelaInicial = ExibeTelaInicial();
         boolean chamadaPeloServico = ChamadaPeloServico();
         boolean hasPendingCrash = DroidCrashReporter.HasPendingCrash(context);
+        restoreServiceOnClose = getIntent().getBooleanExtra(EXTRA_RESTORE_SERVICE_ON_CLOSE, false);
 
         settingsScreenVisible = hasPendingCrash || exibeTelaInicial || chamadaPeloServico;
 
@@ -107,6 +109,7 @@ public class DroidConfigurationActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        RestoreServiceIfNeeded();
         if (activeActivity.get() == this) {
             activeActivity.clear();
         }
@@ -459,12 +462,53 @@ public class DroidConfigurationActivity extends Activity {
                     clipboard.setPrimaryClip(ClipData.newPlainText(
                             getString(R.string.diagnostico_erro_titulo),
                             crash));
-                    Toast.makeText(this, getString(R.string.diagnostico_erro_copiado), Toast.LENGTH_SHORT).show();
                 }
             });
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
                 DroidCrashReporter.ClearLastCrash(context);
                 dialog.dismiss();
+            });
+        });
+        dialog.show();
+    }
+
+    private void ShowAlreadyOpenDialog() {
+        if (isFinishing()) {
+            return;
+        }
+
+        LinearLayout dialogContent = new LinearLayout(this);
+        dialogContent.setOrientation(LinearLayout.VERTICAL);
+        dialogContent.setPadding(dp(22), dp(20), dp(22), dp(16));
+        dialogContent.setBackground(CreateRoundedBackground(COLOR_DIALOG, 24));
+
+        TextView title = new TextView(this);
+        title.setText(getString(R.string.app_name));
+        title.setTextColor(COLOR_PRIMARY_TEXT);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        SetTextSize(title, 20);
+        dialogContent.addView(title);
+
+        TextView message = new TextView(this);
+        message.setText(getString(R.string.recorder_already_open));
+        message.setTextColor(COLOR_SECONDARY_TEXT);
+        SetTextSize(message, 13);
+        message.setPadding(0, dp(8), 0, 0);
+        dialogContent.addView(message);
+
+        final AlertDialog dialog = new AlertDialog.Builder(this)
+                .setView(dialogContent)
+                .setPositiveButton(getString(R.string.diagnostico_erro_fechar), null)
+                .create();
+
+        dialog.setOnShowListener(dialogInterface -> {
+            if (dialog.getWindow() != null) {
+                dialog.getWindow().setBackgroundDrawable(CreateRoundedBackground(Color.TRANSPARENT, 24));
+            }
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(COLOR_PRIMARY_TEXT);
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+                dialog.dismiss();
+                finish();
             });
         });
         dialog.show();
@@ -520,7 +564,23 @@ public class DroidConfigurationActivity extends Activity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        settingsScreenVisible = settingsScreenVisible || ChamadaPeloServico();
+        restoreServiceOnClose = restoreServiceOnClose
+                || intent.getBooleanExtra(EXTRA_RESTORE_SERVICE_ON_CLOSE, false);
         StartServiceWhenReady(false);
+    }
+
+    private void RestoreServiceIfNeeded() {
+        if (!restoreServiceOnClose || DroidHeadService.IsActive()) {
+            return;
+        }
+
+        try {
+            Intent intentService = new Intent(getApplicationContext(), DroidHeadService.class);
+            startService(intentService);
+        } catch (Exception ex) {
+            LogException("DVR", ex);
+        }
     }
 
     @Override
@@ -534,7 +594,6 @@ public class DroidConfigurationActivity extends Activity {
                 if (HasOverlayPermission()) {
                     StartServiceWhenReady(false);
                 } else {
-                    Toast.makeText(this, "Ative a permissão de aparecer sobre outros apps para iniciar o gravador.", Toast.LENGTH_LONG).show();
                     permissionFlowActive = false;
                     startupServiceRequested = false;
                     finish();
@@ -596,11 +655,11 @@ public class DroidConfigurationActivity extends Activity {
         permissionFlowActive = true;
 
         if (DroidHeadService.IsActive()) {
-            Toast.makeText(this, getString(R.string.recorder_already_open), Toast.LENGTH_LONG).show();
             serviceStarted = true;
             startupServiceRequested = false;
             overlayPermissionRequested = false;
             permissionFlowActive = false;
+            ShowAlreadyOpenDialog();
             return;
         }
 

@@ -36,7 +36,6 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
@@ -53,11 +52,11 @@ import java.util.Collections;
 
 public class DroidVideoReviewActivity extends Activity {
     private static final float AUDIO_NOISE_REDUCTION_SOFT_DB = 12f;
-    private static final float AUDIO_NOISE_REDUCTION_STANDARD_DB = 20f;
-    private static final float AUDIO_NOISE_REDUCTION_STRONG_DB = 35f;
     private static final String EXTRA_VIDEO_URI = "extra_video_uri";
     private static final String EXTRA_VIDEO_PATH = "extra_video_path";
     private static final String EXTRA_DISPLAY_NAME = "extra_display_name";
+    private static final String EXTRA_FRONT_CAMERA = "extra_front_camera";
+    private static final String EXTRA_SELFIE_AS_PREVIEWED = "extra_selfie_as_previewed";
     private static final String EXTRA_REVEAL_CENTER_X = "extra_reveal_center_x";
     private static final String EXTRA_REVEAL_CENTER_Y = "extra_reveal_center_y";
     private static final String EXTRA_REVEAL_RADIUS = "extra_reveal_radius";
@@ -69,21 +68,26 @@ public class DroidVideoReviewActivity extends Activity {
     private Uri originalVideoUri;
     private String originalVideoPath;
     private String originalDisplayName;
+    private boolean originalFrontCamera;
+    private boolean originalSelfieAsPreviewed;
     private Uri enhancedVideoUri;
     private String enhancedVideoPath;
+    private boolean isFrontCameraVideo;
+    private boolean selfieAsPreviewed;
     private FrameLayout rootView;
     private FrameLayout videoContainer;
     private FrameLayout enhancementOverlay;
     private PlayerView videoView;
     private ExoPlayer mediaPlayer;
     private ImageButton playButton;
-    private TextView playLabel;
+    private TextView headerSubtitleLabel;
     private TextView closeButton;
     private LinearLayout statusPanel;
     private TextView statusTitleLabel;
     private TextView statusDetailLabel;
     private LinearLayout controlsPanel;
     private View restoreControl;
+    private View selfieControl;
     private SeekBar progressBar;
     private TextView currentTimeLabel;
     private TextView durationLabel;
@@ -96,8 +100,8 @@ public class DroidVideoReviewActivity extends Activity {
     private int processingProgressPercent = -1;
     private int processingEstimatedSeconds = -1;
     private int processingAnimationStep;
+    private int processingSuccessSubtitleRes = R.string.revisao_video_subtitulo_atualizado;
     private int processingTitleRes = R.string.revisao_video_melhorando;
-    private int processingSummaryRes = R.string.revisao_video_melhorando_resumo;
     private int revealCenterX;
     private int revealCenterY;
     private int revealRadius;
@@ -139,6 +143,8 @@ public class DroidVideoReviewActivity extends Activity {
         }
         intent.putExtra(EXTRA_VIDEO_PATH, video.legacyPath);
         intent.putExtra(EXTRA_DISPLAY_NAME, video.displayName);
+        intent.putExtra(EXTRA_FRONT_CAMERA, video.frontCamera);
+        intent.putExtra(EXTRA_SELFIE_AS_PREVIEWED, video.selfieAsPreviewed);
         intent.putExtra(EXTRA_REVEAL_CENTER_X, revealCenterX);
         intent.putExtra(EXTRA_REVEAL_CENTER_Y, revealCenterY);
         intent.putExtra(EXTRA_REVEAL_RADIUS, revealRadius);
@@ -154,7 +160,6 @@ public class DroidVideoReviewActivity extends Activity {
         ReadIntent();
 
         if (videoUri == null && videoPath == null) {
-            Toast.makeText(this, getString(R.string.revisao_video_erro), Toast.LENGTH_SHORT).show();
             finish();
             return;
         }
@@ -298,7 +303,6 @@ public class DroidVideoReviewActivity extends Activity {
             deleted = true;
             LogReviewEvent("trash request accepted");
             RequestRecorderRestore("trash result ok");
-            Toast.makeText(this, getString(R.string.revisao_video_movido_lixeira), Toast.LENGTH_SHORT).show();
             finish();
         } else {
             LogReviewEvent("trash request canceled");
@@ -328,9 +332,13 @@ public class DroidVideoReviewActivity extends Activity {
         videoUri = uriText != null ? Uri.parse(uriText) : null;
         videoPath = intent.getStringExtra(EXTRA_VIDEO_PATH);
         displayName = intent.getStringExtra(EXTRA_DISPLAY_NAME);
+        isFrontCameraVideo = intent.getBooleanExtra(EXTRA_FRONT_CAMERA, false);
+        selfieAsPreviewed = intent.getBooleanExtra(EXTRA_SELFIE_AS_PREVIEWED, false);
         originalVideoUri = videoUri;
         originalVideoPath = videoPath;
         originalDisplayName = displayName;
+        originalFrontCamera = isFrontCameraVideo;
+        originalSelfieAsPreviewed = selfieAsPreviewed;
         revealCenterX = intent.getIntExtra(EXTRA_REVEAL_CENTER_X, 0);
         revealCenterY = intent.getIntExtra(EXTRA_REVEAL_CENTER_Y, 0);
         revealRadius = intent.getIntExtra(EXTRA_REVEAL_RADIUS, 0);
@@ -343,7 +351,7 @@ public class DroidVideoReviewActivity extends Activity {
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.VERTICAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(dp(20), dp(10), dp(70), dp(8));
+        header.setPadding(dp(20), dp(18), dp(78), dp(8));
 
         TextView headerTitle = new TextView(this);
         headerTitle.setText(getString(R.string.revisao_video_titulo));
@@ -353,22 +361,22 @@ public class DroidVideoReviewActivity extends Activity {
         headerTitle.setSingleLine(true);
         header.addView(headerTitle);
 
-        TextView headerSubtitle = new TextView(this);
-        headerSubtitle.setText(getString(R.string.revisao_video_subtitulo));
-        headerSubtitle.setTextColor(Color.rgb(170, 174, 184));
-        headerSubtitle.setTextSize(12);
-        headerSubtitle.setSingleLine(true);
-        headerSubtitle.setIncludeFontPadding(true);
-        headerSubtitle.setPadding(0, 0, 0, dp(2));
-        header.addView(headerSubtitle, new LinearLayout.LayoutParams(
+        headerSubtitleLabel = new TextView(this);
+        headerSubtitleLabel.setText(getString(R.string.revisao_video_subtitulo));
+        headerSubtitleLabel.setTextColor(Color.rgb(170, 174, 184));
+        headerSubtitleLabel.setTextSize(12);
+        headerSubtitleLabel.setSingleLine(true);
+        headerSubtitleLabel.setIncludeFontPadding(true);
+        headerSubtitleLabel.setPadding(0, 0, 0, dp(2));
+        header.addView(headerSubtitleLabel, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 dp(22)));
 
         FrameLayout.LayoutParams headerParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
-                dp(64),
+                dp(76),
                 Gravity.TOP);
-        headerParams.setMargins(0, dp(8), 0, 0);
+        headerParams.setMargins(0, dp(12), 0, 0);
         rootView.addView(header, headerParams);
 
         FrameLayout mediaPanel = new FrameLayout(this);
@@ -377,7 +385,7 @@ public class DroidVideoReviewActivity extends Activity {
         FrameLayout.LayoutParams mediaPanelParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT);
-        mediaPanelParams.setMargins(dp(16), dp(80), dp(16), dp(176));
+        mediaPanelParams.setMargins(dp(16), dp(96), dp(16), dp(176));
         rootView.addView(mediaPanel, mediaPanelParams);
 
         videoContainer = new FrameLayout(this);
@@ -423,18 +431,19 @@ public class DroidVideoReviewActivity extends Activity {
 
         statusTitleLabel = new TextView(this);
         statusTitleLabel.setTextColor(Color.rgb(232, 233, 238));
-        statusTitleLabel.setTextSize(14);
+        statusTitleLabel.setTextSize(12);
         statusTitleLabel.setTypeface(Typeface.DEFAULT_BOLD);
         statusTitleLabel.setGravity(Gravity.CENTER);
         statusTitleLabel.setSingleLine(true);
         statusPanel.addView(statusTitleLabel);
 
         statusDetailLabel = new TextView(this);
-        statusDetailLabel.setTextColor(Color.rgb(190, 193, 201));
-        statusDetailLabel.setTextSize(12);
+        statusDetailLabel.setTextColor(Color.WHITE);
+        statusDetailLabel.setTextSize(16);
+        statusDetailLabel.setTypeface(Typeface.DEFAULT_BOLD);
         statusDetailLabel.setGravity(Gravity.CENTER);
         statusDetailLabel.setSingleLine(true);
-        statusDetailLabel.setPadding(0, dp(2), 0, 0);
+        statusDetailLabel.setPadding(0, dp(1), 0, 0);
         statusPanel.addView(statusDetailLabel);
         statusPanel.setVisibility(View.GONE);
 
@@ -462,11 +471,17 @@ public class DroidVideoReviewActivity extends Activity {
 
         LinearLayout.LayoutParams controlItemParams = new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1);
-        controls.addView(CreatePlayControl(), controlItemParams);
         controls.addView(CreateControl(android.R.drawable.ic_menu_share,
                 getString(R.string.revisao_video_compartilhar),
                 Color.rgb(48, 118, 230),
                 v -> ShareVideo()), controlItemParams);
+        if (ShouldShowSelfiePreviewControl()) {
+            selfieControl = CreateControl(android.R.drawable.ic_menu_camera,
+                    getString(R.string.spf_salvar_selfies_como_visualizadas),
+                    Color.rgb(28, 145, 96),
+                    v -> SaveSelfieAsPreviewed());
+            controls.addView(selfieControl, controlItemParams);
+        }
         if (DroidVideoRecorder.IsAudioNoiseReductionSupported()) {
             controls.addView(CreateControl(R.drawable.ic_ai_sparkles_bitmap,
                     getString(R.string.revisao_video_voz),
@@ -539,6 +554,12 @@ public class DroidVideoReviewActivity extends Activity {
         panel.setPadding(dp(14), dp(8), dp(14), dp(8));
         panel.setBackground(CreateRounded(Color.rgb(22, 23, 27), dp(22)));
 
+        playButton = CreateIconButton(android.R.drawable.ic_media_pause, Color.rgb(28, 145, 96));
+        playButton.setOnClickListener(v -> TogglePlay());
+        LinearLayout.LayoutParams playParams = new LinearLayout.LayoutParams(dp(40), dp(40));
+        playParams.setMargins(0, 0, dp(8), 0);
+        panel.addView(playButton, playParams);
+
         currentTimeLabel = CreateTimeLabel("00:00");
         panel.addView(currentTimeLabel);
 
@@ -595,16 +616,6 @@ public class DroidVideoReviewActivity extends Activity {
         return label;
     }
 
-    private View CreatePlayControl() {
-        LinearLayout container = CreateControlContainer();
-        playButton = CreateIconButton(android.R.drawable.ic_media_pause, Color.rgb(28, 145, 96));
-        playButton.setOnClickListener(v -> TogglePlay());
-        container.addView(playButton);
-        playLabel = CreateControlLabel(getString(R.string.revisao_video_pause));
-        container.addView(playLabel);
-        return container;
-    }
-
     private View CreateControl(int icon, String label, int color, View.OnClickListener listener) {
         LinearLayout container = CreateControlContainer();
         ImageButton button = CreateIconButton(icon, color);
@@ -612,6 +623,12 @@ public class DroidVideoReviewActivity extends Activity {
         container.addView(button);
         container.addView(CreateControlLabel(label));
         return container;
+    }
+
+    private boolean ShouldShowSelfiePreviewControl() {
+        return DroidPrefsUtils.salvaSelfiesComoVisualizadas(this)
+                && isFrontCameraVideo
+                && !selfieAsPreviewed;
     }
 
     private LinearLayout CreateControlContainer() {
@@ -709,7 +726,7 @@ public class DroidVideoReviewActivity extends Activity {
                 @Override
                 public void onPlayerError(PlaybackException error) {
                     LogReviewException("player error", error);
-                    Toast.makeText(DroidVideoReviewActivity.this, getString(R.string.revisao_video_erro), Toast.LENGTH_SHORT).show();
+                    UpdateHeaderSubtitle(R.string.revisao_video_erro);
                     playing = false;
                     UpdatePlayState();
                     RequestEmergencyClose("Erro no player da revisao", error);
@@ -720,7 +737,7 @@ public class DroidVideoReviewActivity extends Activity {
             LogReviewEvent("player build end");
         } catch (Exception ex) {
             LogReviewException("prepare video failed", ex);
-            Toast.makeText(this, getString(R.string.revisao_video_erro), Toast.LENGTH_SHORT).show();
+            UpdateHeaderSubtitle(R.string.revisao_video_erro);
             playing = false;
             UpdatePlayState();
             RequestEmergencyClose("Falha ao abrir o video na revisao", ex);
@@ -809,11 +826,10 @@ public class DroidVideoReviewActivity extends Activity {
     }
 
     private void UpdatePlayState() {
-        if (playButton == null || playLabel == null) {
+        if (playButton == null) {
             return;
         }
         playButton.setImageResource(playing ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play);
-        playLabel.setText(playing ? getString(R.string.revisao_video_pause) : getString(R.string.revisao_video_play));
     }
 
     private void StartProgressUpdates() {
@@ -919,7 +935,7 @@ public class DroidVideoReviewActivity extends Activity {
 
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
-        actions.setGravity(Gravity.RIGHT);
+        actions.setGravity(Gravity.CENTER);
         actions.setPadding(0, dp(20), 0, 0);
 
         TextView cancel = CreateDialogButton(getString(R.string.revisao_video_cancelar),
@@ -928,12 +944,16 @@ public class DroidVideoReviewActivity extends Activity {
                 Color.rgb(45, 108, 223), Color.WHITE);
 
         LinearLayout.LayoutParams cancelParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, dp(44));
+                0, dp(44), 1);
         cancelParams.setMargins(0, 0, dp(10), 0);
+        LinearLayout.LayoutParams confirmParams = new LinearLayout.LayoutParams(
+                0, dp(44), 1);
+        confirmParams.setMargins(dp(10), 0, 0, 0);
         actions.addView(cancel, cancelParams);
-        actions.addView(confirm, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, dp(44)));
-        content.addView(actions);
+        actions.addView(confirm, confirmParams);
+        content.addView(actions, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
 
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setView(content)
@@ -960,8 +980,8 @@ public class DroidVideoReviewActivity extends Activity {
         button.setTextSize(14);
         button.setTypeface(Typeface.DEFAULT_BOLD);
         button.setGravity(Gravity.CENTER);
-        button.setMinWidth(dp(104));
-        button.setPadding(dp(18), 0, dp(18), 0);
+        button.setMinWidth(0);
+        button.setPadding(dp(10), 0, dp(10), 0);
         button.setBackground(CreateRounded(backgroundColor, dp(22)));
         return button;
     }
@@ -981,7 +1001,6 @@ public class DroidVideoReviewActivity extends Activity {
                 if (MoveMediaStoreVideoToTrashDirectly()) {
                     deleted = true;
                     RequestRecorderRestore("trash moved directly");
-                    Toast.makeText(this, getString(R.string.revisao_video_movido_lixeira), Toast.LENGTH_SHORT).show();
                     finish();
                     return;
                 }
@@ -1001,7 +1020,7 @@ public class DroidVideoReviewActivity extends Activity {
             } catch (IntentSender.SendIntentException ex) {
                 LogReviewException("trash request failed", ex);
                 StartVideo();
-                Toast.makeText(this, getString(R.string.revisao_video_erro), Toast.LENGTH_SHORT).show();
+                UpdateHeaderSubtitle(R.string.revisao_video_erro);
                 return;
             } catch (Exception ex) {
                 LogReviewException("move to trash failed", ex);
@@ -1045,10 +1064,9 @@ public class DroidVideoReviewActivity extends Activity {
 
         if (success) {
             deleted = true;
-            Toast.makeText(this, getString(R.string.revisao_video_movido_lixeira), Toast.LENGTH_SHORT).show();
             finish();
         } else {
-            Toast.makeText(this, getString(R.string.revisao_video_erro), Toast.LENGTH_SHORT).show();
+            UpdateHeaderSubtitle(R.string.revisao_video_erro);
         }
     }
 
@@ -1058,7 +1076,7 @@ public class DroidVideoReviewActivity extends Activity {
         }
         Uri shareUri = GetShareUri();
         if (shareUri == null) {
-            Toast.makeText(this, getString(R.string.revisao_video_erro), Toast.LENGTH_SHORT).show();
+            UpdateHeaderSubtitle(R.string.revisao_video_erro);
             return;
         }
 
@@ -1073,133 +1091,80 @@ public class DroidVideoReviewActivity extends Activity {
         ProcessVideoEnhancement(false, 0f);
     }
 
+    private void SaveSelfieAsPreviewed() {
+        if (enhancingVideo || deleted || !ShouldShowSelfiePreviewControl()) {
+            return;
+        }
+
+        DroidVideoRecorder.RecordedVideo video = CreateCurrentRecordedVideo();
+        if (!video.HasVideo()) {
+            UpdateHeaderSubtitle(R.string.revisao_video_selfie_visualizada_erro);
+            return;
+        }
+
+        processingTitleRes = R.string.revisao_video_selfie_visualizada_processando;
+        processingSuccessSubtitleRes = R.string.revisao_video_selfie_visualizada_aplicada;
+        UpdateHeaderSubtitle(R.string.revisao_video_subtitulo_selfie_visualizada);
+        processingAudioMode = false;
+        processingProgressPercent = 1;
+        processingEstimatedSeconds = -1;
+        PausePlayerForProcessing();
+        SetEnhancementState(true);
+
+        DroidVideoRecorder.VideoEnhancementListener listener = new DroidVideoRecorder.VideoEnhancementListener() {
+            @Override
+            public void OnVideoEnhanced(DroidVideoRecorder.RecordedVideo video) {
+                runOnUiThread(() -> {
+                    DeleteEnhancedVideoIfPossible();
+                    ApplyCurrentVideo(video);
+                    enhancedVideoUri = video.uri;
+                    enhancedVideoPath = video.legacyPath;
+                    if (restoreControl != null) {
+                        restoreControl.setVisibility(View.VISIBLE);
+                    }
+                    if (selfieControl != null) {
+                        selfieControl.setVisibility(View.GONE);
+                    }
+                    SetEnhancementState(false);
+                    UpdateHeaderSubtitle(processingSuccessSubtitleRes);
+                    StartVideo();
+                });
+            }
+
+            @Override
+            public void OnVideoEnhancementFailed() {
+                runOnUiThread(() -> {
+                    SetEnhancementState(false);
+                    UpdateHeaderSubtitle(R.string.revisao_video_selfie_visualizada_erro);
+                    StartVideo();
+                });
+            }
+
+            @Override
+            public void OnVideoEnhancementProgress(int percent, int estimatedSecondsRemaining) {
+                runOnUiThread(() -> {
+                    processingProgressPercent = percent;
+                    processingEstimatedSeconds = estimatedSecondsRemaining;
+                    UpdateProcessingOverlayText();
+                });
+            }
+        };
+
+        if (!DroidVideoRecorder.SaveSelfieAsPreviewed(this, video, listener)) {
+            SetEnhancementState(false);
+            UpdateHeaderSubtitle(R.string.revisao_video_selfie_visualizada_erro);
+            StartVideo();
+        }
+    }
+
     private void ReduceAudioNoise() {
         if (enhancingVideo || deleted) {
             return;
         }
 
-        LinearLayout dialogContent = new LinearLayout(this);
-        dialogContent.setOrientation(LinearLayout.VERTICAL);
-        dialogContent.setPadding(dp(22), dp(20), dp(22), dp(14));
-        dialogContent.setBackground(CreateRounded(Color.rgb(34, 35, 39), dp(24)));
-
-        TextView title = new TextView(this);
-        title.setText(getString(R.string.revisao_video_voz_intensidade_titulo));
-        title.setTextColor(Color.WHITE);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
-        title.setTextSize(20);
-        dialogContent.addView(title);
-
-        TextView summary = new TextView(this);
-        summary.setText(getString(R.string.revisao_video_voz_intensidade_resumo));
-        summary.setTextColor(Color.rgb(190, 193, 201));
-        summary.setTextSize(13);
-        summary.setPadding(0, dp(6), 0, dp(12));
-        dialogContent.addView(summary);
-
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setView(dialogContent)
-                .create();
-
-        dialogContent.addView(CreateAudioStrengthButton(
-                getString(R.string.revisao_video_voz_suave),
-                getString(R.string.revisao_video_voz_suave_resumo),
-                Color.rgb(28, 145, 96),
-                () -> {
-                    dialog.dismiss();
-                    ProcessVideoEnhancement(true, AUDIO_NOISE_REDUCTION_SOFT_DB);
-                }));
-        dialogContent.addView(CreateAudioStrengthButton(
-                getString(R.string.revisao_video_voz_padrao),
-                getString(R.string.revisao_video_voz_padrao_resumo),
-                Color.rgb(48, 118, 230),
-                () -> {
-                    dialog.dismiss();
-                    ProcessVideoEnhancement(true, AUDIO_NOISE_REDUCTION_STANDARD_DB);
-                }));
-        dialogContent.addView(CreateAudioStrengthButton(
-                getString(R.string.revisao_video_voz_forte),
-                getString(R.string.revisao_video_voz_forte_resumo),
-                Color.rgb(121, 88, 230),
-                () -> {
-                    dialog.dismiss();
-                    ProcessVideoEnhancement(true, AUDIO_NOISE_REDUCTION_STRONG_DB);
-                }));
-
-        TextView cancel = new TextView(this);
-        cancel.setText(getString(R.string.revisao_video_cancelar));
-        cancel.setTextColor(Color.rgb(190, 193, 201));
-        cancel.setGravity(Gravity.CENTER);
-        cancel.setTypeface(Typeface.DEFAULT_BOLD);
-        cancel.setTextSize(14);
-        cancel.setPadding(0, dp(14), 0, dp(4));
-        cancel.setOnClickListener(v -> dialog.dismiss());
-        dialogContent.addView(cancel, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        dialog.setOnShowListener(dialogInterface -> {
-            if (dialog.getWindow() != null) {
-                dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            }
-        });
-        dialog.show();
-    }
-
-    private View CreateAudioStrengthButton(String title, String summary, int iconColor, Runnable action) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(14), dp(12), dp(14), dp(12));
-        row.setBackground(CreateRounded(Color.rgb(45, 46, 52), dp(18)));
-        row.setOnClickListener(v -> action.run());
-
-        TextView icon = new TextView(this);
-        icon.setText("IA");
-        icon.setTextColor(Color.WHITE);
-        icon.setGravity(Gravity.CENTER);
-        icon.setTypeface(Typeface.DEFAULT_BOLD);
-        icon.setTextSize(12);
-        icon.setBackground(CreateOval(iconColor));
-        LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(38), dp(38));
-        iconParams.setMargins(0, 0, dp(14), 0);
-        row.addView(icon, iconParams);
-
-        LinearLayout texts = new LinearLayout(this);
-        texts.setOrientation(LinearLayout.VERTICAL);
-
-        TextView titleView = new TextView(this);
-        titleView.setText(title);
-        titleView.setTextColor(Color.rgb(248, 248, 250));
-        titleView.setTypeface(Typeface.DEFAULT_BOLD);
-        titleView.setTextSize(16);
-        texts.addView(titleView);
-
-        TextView summaryView = new TextView(this);
-        summaryView.setText(summary);
-        summaryView.setTextColor(Color.rgb(180, 182, 190));
-        summaryView.setTextSize(12);
-        summaryView.setPadding(0, dp(3), 0, 0);
-        texts.addView(summaryView);
-
-        row.addView(texts, new LinearLayout.LayoutParams(0,
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                1));
-
-        TextView arrow = new TextView(this);
-        arrow.setText(">");
-        arrow.setTextColor(Color.rgb(176, 179, 188));
-        arrow.setGravity(Gravity.CENTER);
-        arrow.setTextSize(18);
-        row.addView(arrow, new LinearLayout.LayoutParams(dp(24),
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT);
-        rowParams.setMargins(0, dp(6), 0, dp(6));
-        row.setLayoutParams(rowParams);
-        return row;
+        UpdateHeaderSubtitle(R.string.revisao_video_subtitulo_voz_suave);
+        processingSuccessSubtitleRes = R.string.revisao_video_subtitulo_voz_suave_aplicada;
+        ProcessVideoEnhancement(true, AUDIO_NOISE_REDUCTION_SOFT_DB);
     }
 
     private void ProcessVideoEnhancement(boolean audioMode, float audioAttenuationDb) {
@@ -1207,21 +1172,18 @@ public class DroidVideoReviewActivity extends Activity {
             return;
         }
 
-        DroidVideoRecorder.RecordedVideo video = new DroidVideoRecorder.RecordedVideo(
-                videoUri,
-                videoPath,
-                displayName);
+        DroidVideoRecorder.RecordedVideo video = CreateCurrentRecordedVideo();
         if (!video.HasVideo()) {
-            Toast.makeText(this, getString(audioMode
+            UpdateHeaderSubtitle(audioMode
                     ? R.string.revisao_video_voz_erro
-                    : R.string.revisao_video_melhorar_erro), Toast.LENGTH_SHORT).show();
+                    : R.string.revisao_video_melhorar_erro);
             return;
         }
 
         processingTitleRes = audioMode ? R.string.revisao_video_voz_processando : R.string.revisao_video_melhorando;
-        processingSummaryRes = audioMode
-                ? R.string.revisao_video_voz_processando_resumo
-                : R.string.revisao_video_melhorando_resumo;
+        if (!audioMode) {
+            processingSuccessSubtitleRes = R.string.revisao_video_subtitulo_atualizado;
+        }
         processingAudioMode = audioMode;
         processingProgressPercent = 1;
         processingEstimatedSeconds = -1;
@@ -1236,20 +1198,14 @@ public class DroidVideoReviewActivity extends Activity {
             public void OnVideoEnhanced(DroidVideoRecorder.RecordedVideo video) {
                 runOnUiThread(() -> {
                     DeleteEnhancedVideoIfPossible();
-                    videoUri = video.uri;
-                    videoPath = video.legacyPath;
-                    displayName = video.displayName;
+                    ApplyCurrentVideo(video);
                     enhancedVideoUri = video.uri;
                     enhancedVideoPath = video.legacyPath;
                     if (restoreControl != null) {
                         restoreControl.setVisibility(View.VISIBLE);
                     }
                     SetEnhancementState(false);
-                    Toast.makeText(DroidVideoReviewActivity.this,
-                            getString(audioMode
-                                    ? R.string.revisao_video_voz_aplicada
-                                    : R.string.revisao_video_melhorado),
-                            Toast.LENGTH_SHORT).show();
+                    UpdateHeaderSubtitle(processingSuccessSubtitleRes);
                     StartVideo();
                 });
             }
@@ -1258,11 +1214,9 @@ public class DroidVideoReviewActivity extends Activity {
             public void OnVideoEnhancementFailed() {
                 runOnUiThread(() -> {
                     SetEnhancementState(false);
-                    Toast.makeText(DroidVideoReviewActivity.this,
-                            getString(audioMode
-                                    ? R.string.revisao_video_voz_erro
-                                    : R.string.revisao_video_melhorar_erro),
-                            Toast.LENGTH_SHORT).show();
+                    UpdateHeaderSubtitle(audioMode
+                            ? R.string.revisao_video_voz_erro
+                            : R.string.revisao_video_melhorar_erro);
                     StartVideo();
                 });
             }
@@ -1282,9 +1236,9 @@ public class DroidVideoReviewActivity extends Activity {
 
         if (!started) {
             SetEnhancementState(false);
-            Toast.makeText(this, getString(audioMode
+            UpdateHeaderSubtitle(audioMode
                     ? R.string.revisao_video_voz_erro
-                    : R.string.revisao_video_melhorar_erro), Toast.LENGTH_SHORT).show();
+                    : R.string.revisao_video_melhorar_erro);
             StartVideo();
         }
     }
@@ -1299,13 +1253,45 @@ public class DroidVideoReviewActivity extends Activity {
         videoUri = originalVideoUri;
         videoPath = originalVideoPath;
         displayName = originalDisplayName;
+        isFrontCameraVideo = originalFrontCamera;
+        selfieAsPreviewed = originalSelfieAsPreviewed;
         enhancedVideoUri = null;
         enhancedVideoPath = null;
         if (restoreControl != null) {
             restoreControl.setVisibility(View.GONE);
         }
-        Toast.makeText(this, getString(R.string.revisao_video_restaurado), Toast.LENGTH_SHORT).show();
+        if (selfieControl != null) {
+            selfieControl.setVisibility(ShouldShowSelfiePreviewControl() ? View.VISIBLE : View.GONE);
+        }
+        UpdateHeaderSubtitle(R.string.revisao_video_restaurado);
         StartVideo();
+    }
+
+    private void UpdateHeaderSubtitle(int textRes) {
+        UpdateHeaderSubtitle(getString(textRes));
+    }
+
+    private void UpdateHeaderSubtitle(String text) {
+        if (headerSubtitleLabel != null) {
+            headerSubtitleLabel.setText(text);
+        }
+    }
+
+    private DroidVideoRecorder.RecordedVideo CreateCurrentRecordedVideo() {
+        return new DroidVideoRecorder.RecordedVideo(
+                videoUri,
+                videoPath,
+                displayName,
+                isFrontCameraVideo,
+                selfieAsPreviewed);
+    }
+
+    private void ApplyCurrentVideo(DroidVideoRecorder.RecordedVideo video) {
+        videoUri = video.uri;
+        videoPath = video.legacyPath;
+        displayName = video.displayName;
+        isFrontCameraVideo = video.frontCamera;
+        selfieAsPreviewed = video.selfieAsPreviewed;
     }
 
     private void PausePlayerForProcessing() {
@@ -1402,12 +1388,17 @@ public class DroidVideoReviewActivity extends Activity {
 
     private void UpdateProcessingOverlayText() {
         if (processingProgressPercent < 0) {
-            UpdateStatus(getAnimatedProcessingTitle(), getString(processingSummaryRes));
+            UpdateStatus(getAnimatedProcessingTitle(), null);
             return;
         }
 
+        String remainingText = processingEstimatedSeconds > 0
+                ? getString(R.string.revisao_video_tempo_restante, processingEstimatedSeconds)
+                : getString(R.string.revisao_video_estimando);
         UpdateStatus(getAnimatedProcessingTitle(),
-                getString(processingSummaryRes) + " • " + processingProgressPercent + "%");
+                getString(R.string.revisao_video_progresso_ia,
+                        processingProgressPercent,
+                        remainingText));
     }
 
     private String getAnimatedProcessingTitle() {
