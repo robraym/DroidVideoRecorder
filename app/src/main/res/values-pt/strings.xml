@@ -5,7 +5,6 @@
     <string name="txt_tela_Config">TELA DE CONFIGURAÇÕES</string>
     <string name="spf_exibe_iniciar">Mostrar esta tela ao abrir o app</string>
     <string name="spf_salvar_selfies_como_visualizadas">Selfie visualizada</string>
-    <string name="spf_salvar_selfies_como_visualizadas_resumo">Mostra na revisão do vídeo uma opção para salvar selfies como aparecem na pré-visualização.</string>
     <string name="spf_revisar_video_apos_gravar">Revisão do vídeo</string>
     <string name="spf_revisar_video_apos_gravar_resumo">Mostre o vídeo após a gravação para reproduzir, compartilhar ou mover para a lixeira.</string>
     <string name="spf_previa_camera">Prévia da câmera</string>

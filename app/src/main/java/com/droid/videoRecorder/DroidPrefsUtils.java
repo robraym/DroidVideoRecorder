@@ -62,14 +62,7 @@ public class DroidPrefsUtils {
     }
 
     public static boolean salvaSelfiesComoVisualizadas(final Context context) {
-        boolean spf = false;
-        try {
-            SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
-            spf = sp.getBoolean("spf_salvarSelfiesComoVisualizadas", true);
-        } catch (Exception ex) {
-            Log.d("DroidVideo", ex.getMessage());
-        }
-        return spf;
+        return true;
     }
 
     public static boolean revisarVideoAposGravar(final Context context) {

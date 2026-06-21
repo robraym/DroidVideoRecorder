@@ -61,7 +61,6 @@ public class DroidConfigurationActivity extends Activity {
     private static final int COLOR_ACCENT = Color.rgb(66, 133, 244);
     private static final int COLOR_ICON_BLUE = Color.rgb(45, 101, 214);
     private static final int COLOR_ICON_GREEN = Color.rgb(28, 145, 96);
-    private static final int COLOR_ICON_PURPLE = Color.rgb(121, 88, 230);
     private static final int COLOR_ICON_ORANGE = Color.rgb(202, 118, 36);
 
     private boolean ExibeTelaInicial() {
@@ -169,18 +168,6 @@ public class DroidConfigurationActivity extends Activity {
 
         LinearLayout generalGroup = CreateGroup();
         generalGroup.addView(CreateStorageRow());
-        generalGroup.addView(CreateDivider());
-
-        generalGroup.addView(CreateSwitchRow(
-                "F",
-                COLOR_ICON_PURPLE,
-                getString(R.string.spf_salvar_selfies_como_visualizadas),
-                getString(R.string.spf_salvar_selfies_como_visualizadas_resumo),
-                "spf_salvarSelfiesComoVisualizadas",
-                true,
-                true,
-                (buttonView, isChecked) -> BuildSettingsScreen()));
-
         generalGroup.addView(CreateDivider());
 
         generalGroup.addView(CreateSwitchRow(

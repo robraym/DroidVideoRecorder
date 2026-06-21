@@ -10,12 +10,6 @@
             android:title="@string/txt_titulo"></SwitchPreference>
         <SwitchPreference
             android:defaultValue="true"
-            android:key="spf_salvarSelfiesComoVisualizadas"
-            android:summary="@string/spf_salvar_selfies_como_visualizadas_resumo"
-            android:title="@string/spf_salvar_selfies_como_visualizadas"></SwitchPreference>
-
-        <SwitchPreference
-            android:defaultValue="true"
             android:key="spf_previaCamera"
             android:summary="@string/spf_previa_camera_resumo"
             android:title="@string/spf_previa_camera"></SwitchPreference>

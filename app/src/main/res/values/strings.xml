@@ -5,7 +5,6 @@
     <string name="txt_tela_Config">SETTINGS SCREEN</string>
     <string name="spf_exibe_iniciar">Show this screen when opening the app</string>
     <string name="spf_salvar_selfies_como_visualizadas">Previewed selfie</string>
-    <string name="spf_salvar_selfies_como_visualizadas_resumo">Shows an option in video review to save selfies as they appeared in the preview.</string>
     <string name="spf_revisar_video_apos_gravar">Video review</string>
     <string name="spf_revisar_video_apos_gravar_resumo">Show the video after recording to play, share, or move it to trash.</string>
     <string name="spf_previa_camera">Camera preview</string>
