@@ -77,8 +77,6 @@
     <string name="video_processing_bubble">Aguarde</string>
     <string name="camera_label_front">Frontal</string>
     <string name="camera_label_back">Traseira</string>
-    <string name="camera_indicator_front">F</string>
-    <string name="camera_indicator_back">T</string>
     <string name="recorder_already_open">O gravador já está aberto. Procure a bolinha na tela.</string>
     <string name="diagnostico_erro_titulo">O Recorder encontrou um erro</string>
     <string name="diagnostico_erro_resumo">Copie estas informações e envie para o suporte corrigir o problema.</string>

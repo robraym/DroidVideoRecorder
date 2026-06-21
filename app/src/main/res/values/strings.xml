@@ -77,8 +77,6 @@
     <string name="video_processing_bubble">Please wait</string>
     <string name="camera_label_front">Front</string>
     <string name="camera_label_back">Back</string>
-    <string name="camera_indicator_front">F</string>
-    <string name="camera_indicator_back">B</string>
     <string name="recorder_already_open">Recorder is already open. Look for the bubble on the screen.</string>
     <string name="diagnostico_erro_titulo">Recorder found an error</string>
     <string name="diagnostico_erro_resumo">Copy this information and send it to support so the problem can be fixed.</string>

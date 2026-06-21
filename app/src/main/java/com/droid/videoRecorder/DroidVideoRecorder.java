@@ -18,24 +18,6 @@ import android.provider.MediaStore;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import androidx.annotation.NonNull;
-import androidx.camera.core.CameraSelector;
-import androidx.camera.core.MirrorMode;
-import androidx.camera.core.Preview;
-import androidx.camera.lifecycle.ProcessCameraProvider;
-import androidx.camera.video.AudioSpec;
-import androidx.camera.video.FallbackStrategy;
-import androidx.camera.video.MediaStoreOutputOptions;
-import androidx.camera.video.PendingRecording;
-import androidx.camera.video.Quality;
-import androidx.camera.video.QualitySelector;
-import androidx.camera.video.Recorder;
-import androidx.camera.video.Recording;
-import androidx.camera.video.VideoCapture;
-import androidx.camera.video.VideoRecordEvent;
-import androidx.core.content.ContextCompat;
-import androidx.lifecycle.Lifecycle;
-import androidx.lifecycle.LifecycleOwner;
-import androidx.lifecycle.LifecycleRegistry;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.effect.ScaleAndRotateTransformation;
@@ -46,7 +28,6 @@ import androidx.media3.transformer.ExportException;
 import androidx.media3.transformer.ExportResult;
 import androidx.media3.transformer.ProgressHolder;
 import androidx.media3.transformer.Transformer;
-import com.google.common.util.concurrent.ListenableFuture;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -55,15 +36,12 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayDeque;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 import android.util.Log;
 
 @UnstableApi
@@ -92,16 +70,6 @@ public class DroidVideoRecorder {
     private static boolean pendingVideoProcessing;
     private static boolean copyingMirroredSelfie;
     private static final ProgressHolder MIRROR_PROGRESS_HOLDER = new ProgressHolder();
-    private static final ExecutorService CAMERAX_EXECUTOR = Executors.newSingleThreadExecutor();
-    private static VideoCapture<Recorder> activeCameraXVideoCapture;
-    private static Recording activeCameraXRecording;
-    private static RecordedVideo activeCameraXRecordedVideo;
-    private static CountDownLatch activeCameraXFinalizeLatch;
-    private static RecordedVideoListener activeCameraXRecordedListener;
-    private static DirectRecordingLifecycleOwner directRecordingLifecycleOwner;
-    private static ProcessCameraProvider cameraXProvider;
-    private static boolean cameraXSessionReady;
-    private static int cameraXSessionGeneration;
 
     public interface RecordedVideoListener {
         void OnRecordedVideoReady(RecordedVideo video);
@@ -262,10 +230,6 @@ public class DroidVideoRecorder {
     private static String NameFileDateNow() {
         SimpleDateFormat simpleFormat = new SimpleDateFormat("yyyyMMdd_HHmmss");
         return "DVR_" + simpleFormat.format(new Date(System.currentTimeMillis())) + ".mp4";
-    }
-
-    public static boolean ShouldUseDirectSelfieRecording(Context context) {
-        return false;
     }
 
     private static void SetOutputFile(MediaRecorder mediaRecorder) throws IOException {
@@ -841,10 +805,6 @@ public class DroidVideoRecorder {
         return pendingVideoProcessing;
     }
 
-    public static boolean HasPendingDirectVideoReview() {
-        return activeCameraXRecordedListener != null && activeCameraXFinalizeLatch != null;
-    }
-
     public static int GetVideoProcessingProgressPercent() {
         if (!pendingVideoProcessing) {
             return -1;
@@ -1048,18 +1008,6 @@ public class DroidVideoRecorder {
 
     public static void ReleaseForServiceStop() {
         try {
-            if (activeCameraXRecording != null
-                    || activeCameraXVideoCapture != null
-                    || activeCameraXFinalizeLatch != null) {
-                StopActiveCameraXRecording(false, null);
-            } else {
-                StopCameraXSession();
-            }
-        } catch (Exception ex) {
-            LogException("CameraXRecording", ex);
-        }
-
-        try {
             ResetRecord(false, null);
         } catch (Exception ex) {
             LogException("StopRecording", ex);
@@ -1071,218 +1019,6 @@ public class DroidVideoRecorder {
         currentPreviewHeight = 0;
         currentCameraId = -1;
         mediaRecorderStarted = false;
-    }
-
-    public static boolean OnStartDirectSelfiePreview(SurfaceTexture previewTexture,
-                                                     Runnable previewSizeReadyCallback) {
-        if (appContext == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || previewTexture == null) {
-            return false;
-        }
-
-        try {
-            StopActiveCameraXRecording(false, null);
-            ReleaseLegacyPreviewCamera();
-            StartCameraXSession(previewTexture, previewSizeReadyCallback);
-            return true;
-        } catch (Exception ex) {
-            LogException("CameraXPreview", ex);
-            StopCameraXSession();
-            return false;
-        }
-    }
-
-    public static boolean OnStartDirectSelfieRecording(SurfaceTexture previewTexture,
-                                                       Runnable previewSizeReadyCallback) {
-        if (appContext == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            return false;
-        }
-
-        try {
-            if (activeCameraXRecording != null) {
-                StopActiveCameraXRecording(false, null);
-            }
-            if (activeCameraXVideoCapture == null || !cameraXSessionReady) {
-                ReleaseLegacyPreviewCamera();
-                StartCameraXSession(previewTexture, previewSizeReadyCallback);
-                if (!cameraXSessionReady) {
-                    StopCameraXSession();
-                    return false;
-                }
-            }
-
-            String displayName = NameFileDateNow();
-            ContentValues values = new ContentValues();
-            values.put(MediaStore.Video.Media.DISPLAY_NAME, displayName);
-            values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
-            values.put(MediaStore.Video.Media.RELATIVE_PATH, GetMediaStoreRelativePath());
-
-            MediaStoreOutputOptions outputOptions = new MediaStoreOutputOptions.Builder(
-                    appContext.getContentResolver(),
-                    GetMediaStoreCollectionUri())
-                    .setContentValues(values)
-                    .build();
-
-            activeCameraXRecordedVideo = null;
-            activeCameraXFinalizeLatch = new CountDownLatch(1);
-            PendingRecording pendingRecording = activeCameraXVideoCapture.getOutput()
-                    .prepareRecording(appContext, outputOptions)
-                    .withAudioEnabled();
-            activeCameraXRecording = pendingRecording.start(
-                    CAMERAX_EXECUTOR,
-                    event -> HandleCameraXRecordEvent(event, displayName));
-            mediaRecorderStarted = true;
-            return true;
-        } catch (Exception ex) {
-            LogException("CameraXRecording", ex);
-            StopCameraXSession();
-            return false;
-        }
-    }
-
-    private static void StartCameraXSession(SurfaceTexture previewTexture,
-                                            Runnable previewSizeReadyCallback) throws Exception {
-        final int sessionGeneration = ++cameraXSessionGeneration;
-        cameraXSessionReady = false;
-        QualitySelector qualitySelector = QualitySelector.fromOrderedList(
-                Arrays.asList(Quality.UHD, Quality.FHD, Quality.HD, Quality.SD),
-                FallbackStrategy.lowerQualityOrHigherThan(Quality.SD));
-        Recorder recorder = new Recorder.Builder()
-                .setQualitySelector(qualitySelector)
-                .setAudioSource(AudioSpec.SOURCE_CAMCORDER)
-                .build();
-        activeCameraXVideoCapture = new VideoCapture.Builder<>(recorder)
-                .setMirrorMode(MirrorMode.MIRROR_MODE_ON_FRONT_ONLY)
-                .setTargetRotation(Surface.ROTATION_0)
-                .build();
-            Preview preview = new Preview.Builder()
-                    .setTargetRotation(Surface.ROTATION_0)
-                    .build();
-            if (previewTexture != null) {
-                preview.setSurfaceProvider(request -> {
-                    currentPreviewWidth = request.getResolution().getWidth();
-                    currentPreviewHeight = request.getResolution().getHeight();
-                    if (previewSizeReadyCallback != null) {
-                        MIRROR_HANDLER.post(previewSizeReadyCallback);
-                    }
-                    previewTexture.setDefaultBufferSize(
-                            currentPreviewWidth,
-                            currentPreviewHeight);
-                    Surface surface = new Surface(previewTexture);
-                    request.provideSurface(surface, CAMERAX_EXECUTOR, result -> surface.release());
-                });
-            }
-
-        ListenableFuture<ProcessCameraProvider> providerFuture =
-                ProcessCameraProvider.getInstance(appContext);
-        providerFuture.addListener(() -> {
-            if (sessionGeneration != cameraXSessionGeneration) {
-                return;
-            }
-
-            try {
-                if (directRecordingLifecycleOwner == null) {
-                    directRecordingLifecycleOwner = new DirectRecordingLifecycleOwner();
-                }
-                directRecordingLifecycleOwner.Start();
-
-                ProcessCameraProvider provider = providerFuture.get();
-                provider.unbindAll();
-                provider.bindToLifecycle(
-                        directRecordingLifecycleOwner,
-                        CameraSelector.DEFAULT_FRONT_CAMERA,
-                        preview,
-                        activeCameraXVideoCapture);
-                cameraXProvider = provider;
-                cameraXSessionReady = true;
-            } catch (Exception ex) {
-                LogException("CameraXPreview", ex);
-                StopCameraXSession();
-            }
-        }, ContextCompat.getMainExecutor(appContext));
-    }
-
-    private static void HandleCameraXRecordEvent(VideoRecordEvent event, String displayName) {
-        if (event instanceof VideoRecordEvent.Finalize) {
-            VideoRecordEvent.Finalize finalizeEvent = (VideoRecordEvent.Finalize) event;
-            Uri outputUri = finalizeEvent.getOutputResults().getOutputUri();
-            RecordedVideo recordedVideo = null;
-            if (outputUri != null && !Uri.EMPTY.equals(outputUri)) {
-                recordedVideo = new RecordedVideo(outputUri, null, displayName, true, true);
-                activeCameraXRecordedVideo = recordedVideo;
-            }
-            if (activeCameraXFinalizeLatch != null) {
-                activeCameraXFinalizeLatch.countDown();
-            }
-            if (activeCameraXRecordedListener != null && recordedVideo != null) {
-                NotifyRecordedVideo(activeCameraXRecordedListener, recordedVideo);
-            }
-            StopCameraXSession();
-        }
-    }
-
-    private static RecordedVideo StopActiveCameraXRecording(boolean record, RecordedVideoListener listener) {
-        if (activeCameraXRecording == null && activeCameraXFinalizeLatch == null) {
-            StopCameraXSession();
-            return null;
-        }
-
-        CountDownLatch finalizeLatch = activeCameraXFinalizeLatch;
-        try {
-            if (record) {
-                activeCameraXRecordedListener = listener;
-                if (activeCameraXRecording != null) {
-                    activeCameraXRecording.stop();
-                    activeCameraXRecording = null;
-                }
-                if (finalizeLatch != null) {
-                    finalizeLatch.await(1500, TimeUnit.MILLISECONDS);
-                }
-            } else {
-                activeCameraXRecordedListener = null;
-                if (activeCameraXRecording != null) {
-                    activeCameraXRecording.close();
-                    activeCameraXRecording = null;
-                }
-            }
-        } catch (Exception ex) {
-            LogException("CameraXRecording", ex);
-        }
-
-        RecordedVideo recordedVideo = record ? activeCameraXRecordedVideo : null;
-        if (listener != null && recordedVideo != null && activeCameraXRecordedListener != null) {
-            NotifyRecordedVideo(listener, recordedVideo);
-            activeCameraXRecordedListener = null;
-        }
-
-        if (!record || recordedVideo != null) {
-            StopCameraXSession();
-        }
-        return recordedVideo;
-    }
-
-    private static void StopCameraXSession() {
-        activeCameraXRecording = null;
-        activeCameraXVideoCapture = null;
-        activeCameraXFinalizeLatch = null;
-        activeCameraXRecordedVideo = null;
-        activeCameraXRecordedListener = null;
-        mediaRecorderStarted = false;
-        cameraXSessionReady = false;
-        cameraXSessionGeneration++;
-
-        try {
-            if (cameraXProvider != null) {
-                cameraXProvider.unbindAll();
-            }
-        } catch (Exception ex) {
-            LogException("CameraXRecording", ex);
-        }
-        cameraXProvider = null;
-
-        if (directRecordingLifecycleOwner != null) {
-            directRecordingLifecycleOwner.Stop();
-            directRecordingLifecycleOwner = null;
-        }
     }
 
     public static void OnInitRec (Configuration orient, int orientation, DroidConstants.EnumTypeViewCam typeViewCam)
@@ -1464,14 +1200,6 @@ public class DroidVideoRecorder {
     }
 
     public static RecordedVideo OnStopRecording(boolean record, RecordedVideoListener listener) {
-        if (activeCameraXRecording != null) {
-            return StopActiveCameraXRecording(record, listener);
-        }
-        if (activeCameraXVideoCapture != null) {
-            StopCameraXSession();
-            return null;
-        }
-
         try {
             if (mServiceCamera != null) {
                 mServiceCamera.reconnect();
@@ -1480,37 +1208,5 @@ public class DroidVideoRecorder {
             LogException("StopRecording", ex);
         }
         return ResetRecord(record, listener);
-    }
-
-    private static class DirectRecordingLifecycleOwner implements LifecycleOwner {
-        private final LifecycleRegistry lifecycleRegistry = new LifecycleRegistry(this);
-
-        void Start() {
-            if (Looper.myLooper() == Looper.getMainLooper()) {
-                SetState(Lifecycle.State.CREATED);
-                SetState(Lifecycle.State.STARTED);
-                SetState(Lifecycle.State.RESUMED);
-            } else {
-                MIRROR_HANDLER.post(this::Start);
-            }
-        }
-
-        void Stop() {
-            if (Looper.myLooper() == Looper.getMainLooper()) {
-                SetState(Lifecycle.State.DESTROYED);
-            } else {
-                MIRROR_HANDLER.post(this::Stop);
-            }
-        }
-
-        private void SetState(Lifecycle.State state) {
-            lifecycleRegistry.setCurrentState(state);
-        }
-
-        @NonNull
-        @Override
-        public Lifecycle getLifecycle() {
-            return lifecycleRegistry;
-        }
     }
 }

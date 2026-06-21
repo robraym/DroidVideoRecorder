@@ -435,24 +435,33 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         return getString(R.string.camera_label_back);
     }
 
-    private String GetCameraBadgeText() {
-        if (DroidVideoRecorder.TypeViewCam == DroidConstants.EnumTypeViewCam.FacingFront) {
-            return getString(R.string.camera_indicator_front);
+    private boolean ShouldShowCameraIndicator() {
+        return !DroidPrefsUtils.exibePreviaCamera(context)
+                && (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.STOP
+                || DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.RECORD);
+    }
+
+    private void RefreshCameraIndicatorForCurrentState() {
+        if (ShouldShowCameraIndicator()) {
+            ShowCameraIndicator();
+        } else {
+            HideCameraIndicator();
         }
-        return getString(R.string.camera_indicator_back);
     }
 
     private void ShowCameraIndicator() {
-        txtHead.setText("");
-        txtHead.setVisibility(View.INVISIBLE);
-        txtCameraBadge.setText(GetCameraIndicatorText().toUpperCase(Locale.getDefault()));
-        txtCameraBadge.setTextSize(BubbleTextSize(14.2f));
+        if (DroidVideoRecorder.StateRecVideo != DroidConstants.EnumStateRecVideo.RECORD) {
+            txtHead.setText("");
+            txtHead.setVisibility(View.INVISIBLE);
+        }
+        txtCameraBadge.setText(GetCameraIndicatorText());
+        txtCameraBadge.setTextSize(BubbleTextSize(12.8f));
         txtCameraBadge.setSingleLine(true);
         txtCameraBadge.setGravity(Gravity.CENTER);
         txtCameraBadge.setPadding(0, 0, 0, 0);
         txtCameraBadge.setScaleX(1f);
         txtCameraBadge.setScaleY(1f);
-        txtCameraBadge.setShadowLayer(4, 0, 1, Color.BLACK);
+        txtCameraBadge.setShadowLayer(3, 0, 1, Color.BLACK);
         txtCameraBadge.setVisibility(View.VISIBLE);
     }
 
@@ -461,18 +470,6 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         txtCameraBadge.setAlpha(1f);
         txtCameraBadge.setVisibility(View.INVISIBLE);
         txtCameraBadge.invalidate();
-    }
-
-    private void ShowRecordingBadge() {
-        txtCameraBadge.setText(GetCameraBadgeText());
-        txtCameraBadge.setTextSize(BubbleTextSize(9));
-        txtCameraBadge.setSingleLine(true);
-        txtCameraBadge.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-        txtCameraBadge.setPadding(0, 0, 0, dp(BubbleDp(5)));
-        txtCameraBadge.setScaleX(1f);
-        txtCameraBadge.setScaleY(1f);
-        txtCameraBadge.setShadowLayer(3, 0, 1, Color.BLACK);
-        txtCameraBadge.setVisibility(View.VISIBLE);
     }
 
     private void HideRecordingBadge() {
@@ -489,6 +486,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         if (chatHead.getVisibility() == View.VISIBLE) {
             txtHead.setVisibility(View.VISIBLE);
         }
+        RefreshCameraIndicatorForCurrentState();
     }
 
     private void InicializarVariavel() {
@@ -858,8 +856,12 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     private void ShowRec() {
         CancelPalmRecordingCountdown();
         PausePalmGestureDetection();
-        HideCameraIndicator();
         boolean showCameraPreview = DroidPrefsUtils.exibePreviaCamera(context);
+        if (showCameraPreview) {
+            HideCameraIndicator();
+        } else {
+            ShowCameraIndicator();
+        }
         ShowRecordingPreview(showCameraPreview);
         SetPreviewFullScreen(false);
         boolean recordingStarted = false;
@@ -886,7 +888,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         }
         DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.RECORD;
         UpdateNotification(GetRecordingNotificationText());
-        HideRecordingBadge();
+        RefreshCameraIndicatorForCurrentState();
         Vibrar(50);
         asyncTask = new Sincronizar().execute();
     }
@@ -903,8 +905,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         }
         if (shouldReviewVideo
                 && recordedVideo == null
-                && (DroidVideoRecorder.HasPendingVideoProcessing()
-                || DroidVideoRecorder.HasPendingDirectVideoReview())) {
+                && DroidVideoRecorder.HasPendingVideoProcessing()) {
             ShowVideoProcessing();
         } else {
             ShowStop();
@@ -1232,6 +1233,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             mainHandler.removeCallbacks(delayedCameraIndicatorAfterZoom);
         } else {
             chatHead.setBackground(CreatePreviewOffBubbleBackground(COLOR_READY_PREVIEW_OFF));
+            RefreshCameraIndicatorForCurrentState();
         }
     }
 
@@ -1746,6 +1748,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
                 chatHead.setBackground(CreatePreviewOffBubbleBackground(COLOR_READY_PREVIEW_OFF));
             }
         }
+        RefreshCameraIndicatorForCurrentState();
     }
 
     private void SetTouchTargetExpandedForResize(boolean expanded) {
@@ -2153,7 +2156,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             super.onCancelled();
             txtHead.setText("00:00");
             if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.STOP) {
-                HideCameraIndicator();
+                RefreshCameraIndicatorForCurrentState();
             } else {
                 txtHead.setVisibility(View.INVISIBLE);
             }
