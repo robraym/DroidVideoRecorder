@@ -1121,7 +1121,7 @@ public class DroidVideoRecorder {
 
             mMediaRecorder = new MediaRecorder();
             mMediaRecorder.setCamera(mServiceCamera);
-            mMediaRecorder.setAudioSource(GetVoiceFocusedAudioSource());
+            mMediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
             mMediaRecorder.setVideoSource(MediaRecorder.VideoSource.CAMERA);
             SetOutputFile(mMediaRecorder);
 
@@ -1142,13 +1142,6 @@ public class DroidVideoRecorder {
             ResetRecord(false, null);
             return false;
         }
-    }
-
-    private static int GetVoiceFocusedAudioSource() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
-            return MediaRecorder.AudioSource.VOICE_COMMUNICATION;
-        }
-        return MediaRecorder.AudioSource.MIC;
     }
 
     private static RecordedVideo ResetRecord(boolean record, RecordedVideoListener listener)

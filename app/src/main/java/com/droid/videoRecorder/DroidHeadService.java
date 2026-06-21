@@ -7,6 +7,7 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ServiceInfo;
 import android.content.res.Configuration;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
@@ -364,6 +365,12 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     }
 
     private void StartForegroundServiceNotification() {
+        StartForegroundServiceNotification(
+                GetReadyNotificationText(),
+                GetReadyForegroundServiceType());
+    }
+
+    private void StartForegroundServiceNotification(String contentText, int foregroundServiceType) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(
                     NOTIFICATION_CHANNEL_ID,
@@ -393,8 +400,44 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             notificationBuilder.setChannelId(NOTIFICATION_CHANNEL_ID);
         }
 
-        notificationBuilder.setContentText(GetReadyNotificationText());
-        startForeground(FOREGROUND_NOTIFICATION_ID, notificationBuilder.build());
+        notificationBuilder.setContentText(contentText);
+        StartForegroundSafely(notificationBuilder.build(), foregroundServiceType);
+    }
+
+    private int GetReadyForegroundServiceType() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            return ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA;
+        }
+        return 0;
+    }
+
+    private int GetRecordingForegroundServiceType() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            return ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+                    | ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE;
+        }
+        return 0;
+    }
+
+    private void StartForegroundSafely(Notification notification, int foregroundServiceType) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                startForeground(FOREGROUND_NOTIFICATION_ID, notification, foregroundServiceType);
+                return;
+            } catch (SecurityException ex) {
+                if ((foregroundServiceType & ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE) != 0) {
+                    Log.e("DVR", "Microfone indisponivel para foreground service. Mantendo camera.", ex);
+                    startForeground(
+                            FOREGROUND_NOTIFICATION_ID,
+                            notification,
+                            ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA);
+                    return;
+                }
+                throw ex;
+            }
+        }
+
+        startForeground(FOREGROUND_NOTIFICATION_ID, notification);
     }
 
     private void UpdateNotification(String text) {
@@ -887,7 +930,9 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             return;
         }
         DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.RECORD;
-        UpdateNotification(GetRecordingNotificationText());
+        StartForegroundServiceNotification(
+                GetRecordingNotificationText(),
+                GetRecordingForegroundServiceType());
         RefreshCameraIndicatorForCurrentState();
         Vibrar(50);
         asyncTask = new Sincronizar().execute();
@@ -941,7 +986,9 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         SetPreviewFullScreen(false);
         DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.STOP;
         DroidVideoRecorder.OnStopRecording(false);
-        UpdateNotification(GetReadyNotificationText());
+        StartForegroundServiceNotification(
+                GetReadyNotificationText(),
+                GetReadyForegroundServiceType());
         ShowReadyPreview();
     }
 
@@ -949,7 +996,9 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         HideVideoProcessing();
         SetPreviewFullScreen(false);
         DroidVideoRecorder.StateRecVideo = DroidConstants.EnumStateRecVideo.STOP;
-        UpdateNotification(GetReadyNotificationText());
+        StartForegroundServiceNotification(
+                GetReadyNotificationText(),
+                GetReadyForegroundServiceType());
         ShowReadyPreview();
     }
 

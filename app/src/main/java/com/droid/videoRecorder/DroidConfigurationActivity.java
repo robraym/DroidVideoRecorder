@@ -82,9 +82,9 @@ public class DroidConfigurationActivity extends Activity {
         boolean hasPendingCrash = DroidCrashReporter.HasPendingCrash(context);
         restoreServiceOnClose = getIntent().getBooleanExtra(EXTRA_RESTORE_SERVICE_ON_CLOSE, false);
 
-        settingsScreenVisible = hasPendingCrash || exibeTelaInicial || chamadaPeloServico;
+        settingsScreenVisible = exibeTelaInicial || chamadaPeloServico;
 
-        if (settingsScreenVisible) {
+        if (hasPendingCrash || settingsScreenVisible) {
             setTheme(R.style.DefaultTheme);
         } else {
             setTheme(R.style.TranslucentTheme);
@@ -92,13 +92,16 @@ public class DroidConfigurationActivity extends Activity {
         super.onCreate(savedInstanceState);
         canFinish = true;
 
+        if (hasPendingCrash) {
+            BuildDiagnosticScreen();
+            getWindow().getDecorView().post(this::ShowLastCrashDialog);
+            return;
+        }
+
         if (settingsScreenVisible) {
             BuildSettingsScreen();
             if (exibeTelaInicial && !chamadaPeloServico) {
                 DroidPrefsUtils.marcaTelaInicialExibida(context);
-            }
-            if (hasPendingCrash) {
-                getWindow().getDecorView().post(this::ShowLastCrashDialog);
             }
         } else if (HasRuntimePermissions() && HasOverlayPermission()) {
             finish();
@@ -417,6 +420,16 @@ public class DroidConfigurationActivity extends Activity {
         dialog.show();
     }
 
+    private void BuildDiagnosticScreen() {
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setGravity(Gravity.CENTER);
+        root.setBackgroundColor(COLOR_BACKGROUND);
+        setContentView(root, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.MATCH_PARENT));
+    }
+
     private void ShowLastCrashDialog() {
         String crash = DroidCrashReporter.GetLastCrash(context);
         if (crash == null || crash.length() == 0 || isFinishing()) {
@@ -479,6 +492,7 @@ public class DroidConfigurationActivity extends Activity {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
                 DroidCrashReporter.ClearLastCrash(context);
                 dialog.dismiss();
+                StartServiceWhenReady(false);
             });
         });
         dialog.show();
