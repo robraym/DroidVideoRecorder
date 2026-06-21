@@ -8,6 +8,8 @@
     <string name="spf_salvar_selfies_como_visualizadas_resumo">Shows an option in video review to save selfies as they appeared in the preview.</string>
     <string name="spf_revisar_video_apos_gravar">Video review</string>
     <string name="spf_revisar_video_apos_gravar_resumo">Show the video after recording to play, share, or move it to trash.</string>
+    <string name="spf_previa_camera">Camera preview</string>
+    <string name="spf_previa_camera_resumo">Show the camera inside the floating button before and during recording.</string>
     <string name="revisao_video_titulo">Video review</string>
     <string name="revisao_video_subtitulo">Check your recording</string>
     <string name="revisao_video_subtitulo_voz_suave">Soft noise reduction</string>

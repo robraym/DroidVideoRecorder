@@ -8,6 +8,8 @@
     <string name="spf_salvar_selfies_como_visualizadas_resumo">Mostra na revisão do vídeo uma opção para salvar selfies como aparecem na pré-visualização.</string>
     <string name="spf_revisar_video_apos_gravar">Revisão do vídeo</string>
     <string name="spf_revisar_video_apos_gravar_resumo">Mostre o vídeo após a gravação para reproduzir, compartilhar ou mover para a lixeira.</string>
+    <string name="spf_previa_camera">Prévia da câmera</string>
+    <string name="spf_previa_camera_resumo">Mostra a câmera dentro da bolinha antes e durante a gravação.</string>
     <string name="revisao_video_titulo">Revisão do vídeo</string>
     <string name="revisao_video_subtitulo">Confira sua gravação</string>
     <string name="revisao_video_subtitulo_voz_suave">Redução suave de ruído</string>

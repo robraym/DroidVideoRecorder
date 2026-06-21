@@ -59,6 +59,10 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     private static final float CHAT_HEAD_FULL_PINCH_RANGE = 1.20f;
     private static final int TRASH_TARGET_WIDTH_DP = 104;
     private static final int TRASH_TARGET_HEIGHT_DP = 108;
+    private static final int PREVIEW_DISABLED_ALPHA = 153;
+    private static final int COLOR_READY_PREVIEW_OFF = Color.rgb(34, 142, 30);
+    private static final int COLOR_RECORDING_PREVIEW_OFF = Color.rgb(142, 34, 29);
+    private static final int CAMERA_INDICATOR_AFTER_ZOOM_DELAY_MS = 300;
     private static final float TWIST_THRESHOLD = 5.5f;
     private static final long TWIST_SEQUENCE_TIMEOUT_MS = 900;
     private static final long TWIST_COOLDOWN_MS = 1800;
@@ -133,6 +137,21 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
                 processingDrawable.invalidateSelf();
             }
             mainHandler.postDelayed(this, 700);
+        }
+    };
+    private final Runnable delayedCameraIndicatorAfterZoom = new Runnable() {
+        @Override
+        public void run() {
+            if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.STOP
+                    && !DroidPrefsUtils.exibePreviaCamera(context)) {
+                txtHead.setText("");
+                txtHead.invalidate();
+                txtHead.setVisibility(View.INVISIBLE);
+                txtHead.setSingleLine(false);
+                chatHead.setImageDrawable(null);
+                chatHead.setBackground(CreatePreviewOffBubbleBackground(COLOR_READY_PREVIEW_OFF));
+                ShowCameraIndicator();
+            }
         }
     };
 
@@ -289,6 +308,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         if (activeService.get() == this) {
             activeService.clear();
         }
+        mainHandler.removeCallbacks(delayedCameraIndicatorAfterZoom);
         CancelPalmRecordingCountdown();
         PausePalmGestureDetection();
         DroidVideoRecorder.ReleaseForServiceStop();
@@ -423,20 +443,35 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     }
 
     private void ShowCameraIndicator() {
-        txtHead.setText(GetCameraIndicatorText());
-        txtHead.setTextSize(BubbleTextSize(10));
-        txtHead.setGravity(Gravity.CENTER);
-        txtHead.setPadding(0, 0, 0, 0);
-        txtHead.setVisibility(View.VISIBLE);
-        HideRecordingBadge();
+        txtHead.setText("");
+        txtHead.setVisibility(View.INVISIBLE);
+        txtCameraBadge.setText(GetCameraIndicatorText().toUpperCase(Locale.getDefault()));
+        txtCameraBadge.setTextSize(BubbleTextSize(14.2f));
+        txtCameraBadge.setSingleLine(true);
+        txtCameraBadge.setGravity(Gravity.CENTER);
+        txtCameraBadge.setPadding(0, 0, 0, 0);
+        txtCameraBadge.setScaleX(1f);
+        txtCameraBadge.setScaleY(1f);
+        txtCameraBadge.setShadowLayer(4, 0, 1, Color.BLACK);
+        txtCameraBadge.setVisibility(View.VISIBLE);
     }
 
     private void HideCameraIndicator() {
-        txtHead.setVisibility(View.INVISIBLE);
+        txtCameraBadge.setText("");
+        txtCameraBadge.setAlpha(1f);
+        txtCameraBadge.setVisibility(View.INVISIBLE);
+        txtCameraBadge.invalidate();
     }
 
     private void ShowRecordingBadge() {
         txtCameraBadge.setText(GetCameraBadgeText());
+        txtCameraBadge.setTextSize(BubbleTextSize(9));
+        txtCameraBadge.setSingleLine(true);
+        txtCameraBadge.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        txtCameraBadge.setPadding(0, 0, 0, dp(BubbleDp(5)));
+        txtCameraBadge.setScaleX(1f);
+        txtCameraBadge.setScaleY(1f);
+        txtCameraBadge.setShadowLayer(3, 0, 1, Color.BLACK);
         txtCameraBadge.setVisibility(View.VISIBLE);
     }
 
@@ -805,6 +840,7 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         ShowReadyPreview();
         UpdateNotification(GetReadyNotificationText());
         Vibrar(100);
+        PlayCameraSwitchSound();
     }
 
     private void ChangeSavedTypeViewCam() {
@@ -823,17 +859,19 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         CancelPalmRecordingCountdown();
         PausePalmGestureDetection();
         HideCameraIndicator();
-        ShowRecordingPreview(true);
+        boolean showCameraPreview = DroidPrefsUtils.exibePreviaCamera(context);
+        ShowRecordingPreview(showCameraPreview);
         SetPreviewFullScreen(false);
         boolean recordingStarted = false;
 
         if (!recordingStarted) {
-            ShowRecordingPreview(true);
+            ShowRecordingPreview(showCameraPreview);
             DroidVideoRecorder.OnInitRec(getResources().getConfiguration(), orientationEvent, DroidVideoRecorder.TypeViewCam);
-            ApplyPreviewTransform();
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
+            if (showCameraPreview
+                    && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
                     && readyPreviewView != null
                     && readyPreviewView.isAvailable()) {
+                ApplyPreviewTransform();
                 recordingStarted = DroidVideoRecorder.OnStartRecording(
                         readyPreviewView.getSurfaceTexture(),
                         orientationEvent);
@@ -998,6 +1036,18 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
             return;
         }
 
+        if (!DroidPrefsUtils.exibePreviaCamera(context)) {
+            pendingReadyPreview = false;
+            if (readyPreviewView != null) {
+                readyPreviewView.setVisibility(View.INVISIBLE);
+            }
+            chatHead.setImageDrawable(null);
+            chatHead.setBackground(CreatePreviewOffBubbleBackground(COLOR_READY_PREVIEW_OFF));
+            ShowCameraIndicator();
+            PausePalmGestureDetection();
+            return;
+        }
+
         chatHead.setImageDrawable(null);
         chatHead.setBackground(null);
         HideCameraIndicator();
@@ -1019,7 +1069,11 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         }
 
         chatHead.setImageDrawable(null);
-        chatHead.setBackground(CreatePreviewBorder(Color.rgb(232, 65, 72)));
+        if (DroidPrefsUtils.exibePreviaCamera(context)) {
+            chatHead.setBackground(CreatePreviewBorder(Color.rgb(232, 65, 72)));
+        } else {
+            chatHead.setBackground(CreatePreviewOffBubbleBackground(COLOR_RECORDING_PREVIEW_OFF));
+        }
         if (showPreview) {
             SetPreviewBubble();
         } else if (readyPreviewView != null) {
@@ -1080,6 +1134,17 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         return border;
     }
 
+    private GradientDrawable CreatePreviewOffBubbleBackground(int color) {
+        GradientDrawable background = new GradientDrawable();
+        background.setShape(GradientDrawable.OVAL);
+        background.setColor(Color.argb(
+                PREVIEW_DISABLED_ALPHA,
+                Color.red(color),
+                Color.green(color),
+                Color.blue(color)));
+        return background;
+    }
+
     private GradientDrawable CreateResizeBubbleBackground() {
         GradientDrawable background = new GradientDrawable();
         background.setShape(GradientDrawable.OVAL);
@@ -1113,6 +1178,8 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     private void ShowResizeBubbleIndicator() {
         resizeBubbleIndicatorActive = true;
         SetTouchTargetExpandedForResize(true);
+        mainHandler.removeCallbacks(delayedCameraIndicatorAfterZoom);
+        HideCameraIndicator();
         chatHead.setImageDrawable(null);
         chatHead.setBackground(CreateResizeBubbleBackground());
         txtHead.animate().cancel();
@@ -1123,18 +1190,29 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         txtHead.setGravity(Gravity.CENTER);
         txtHead.setPadding(0, 0, 0, 0);
         txtHead.setVisibility(View.VISIBLE);
-        if (txtCameraBadge != null) {
-            txtCameraBadge.setVisibility(View.INVISIBLE);
-        }
+        ScheduleCameraIndicatorAfterZoomIdle();
     }
 
     private void UpdateResizeBubbleIndicator(int sizeDp) {
         if (!resizeBubbleIndicatorActive) {
             return;
         }
+        HideCameraIndicator();
         chatHead.setBackground(CreateResizeBubbleBackground());
+        txtHead.setSingleLine(true);
         txtHead.setText(GetBubbleSizePercentText(sizeDp));
         txtHead.setTextSize(BubbleTextSize(18));
+        txtHead.setGravity(Gravity.CENTER);
+        txtHead.setPadding(0, 0, 0, 0);
+        txtHead.setVisibility(View.VISIBLE);
+        ScheduleCameraIndicatorAfterZoomIdle();
+    }
+
+    private void ScheduleCameraIndicatorAfterZoomIdle() {
+        mainHandler.removeCallbacks(delayedCameraIndicatorAfterZoom);
+        mainHandler.postDelayed(
+                delayedCameraIndicatorAfterZoom,
+                CAMERA_INDICATOR_AFTER_ZOOM_DELAY_MS);
     }
 
     private void HideResizeBubbleIndicator() {
@@ -1143,12 +1221,18 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         }
         resizeBubbleIndicatorActive = false;
         SetTouchTargetExpandedForResize(false);
-        txtHead.setVisibility(View.INVISIBLE);
-        txtHead.setSingleLine(false);
         chatHead.setImageDrawable(null);
-        chatHead.setBackground(null);
-        HideCameraIndicator();
-        HideRecordingBadge();
+        if (DroidPrefsUtils.exibePreviaCamera(context)) {
+            chatHead.setBackground(null);
+            HideCameraIndicator();
+            txtHead.setText("");
+            txtHead.invalidate();
+            txtHead.setVisibility(View.INVISIBLE);
+            txtHead.setSingleLine(false);
+            mainHandler.removeCallbacks(delayedCameraIndicatorAfterZoom);
+        } else {
+            chatHead.setBackground(CreatePreviewOffBubbleBackground(COLOR_READY_PREVIEW_OFF));
+        }
     }
 
     private float GetVideoProcessingProgressFraction() {
@@ -1352,7 +1436,11 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
         txtCameraBadge.setPadding(0, 0, 0, dp(BubbleDp(5)));
         txtCameraBadge.setTextSize(BubbleTextSize(9));
         if (!resizeBubbleIndicatorActive) {
-            chatHead.setBackground(null);
+            if (DroidPrefsUtils.exibePreviaCamera(context)) {
+                chatHead.setBackground(null);
+            } else {
+                chatHead.setBackground(CreatePreviewOffBubbleBackground(COLOR_READY_PREVIEW_OFF));
+            }
         }
 
         try {
@@ -1645,10 +1733,18 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
     private void RestoreBubbleAppearance() {
         if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.RECORD) {
             chatHead.setImageDrawable(null);
-            chatHead.setBackground(CreatePreviewBorder(Color.rgb(232, 65, 72)));
+            if (DroidPrefsUtils.exibePreviaCamera(context)) {
+                chatHead.setBackground(CreatePreviewBorder(Color.rgb(232, 65, 72)));
+            } else {
+                chatHead.setBackground(CreatePreviewOffBubbleBackground(COLOR_RECORDING_PREVIEW_OFF));
+            }
         } else if (DroidVideoRecorder.StateRecVideo == DroidConstants.EnumStateRecVideo.STOP) {
             chatHead.setImageDrawable(null);
-            chatHead.setBackground(null);
+            if (DroidPrefsUtils.exibePreviaCamera(context)) {
+                chatHead.setBackground(null);
+            } else {
+                chatHead.setBackground(CreatePreviewOffBubbleBackground(COLOR_READY_PREVIEW_OFF));
+            }
         }
     }
 
@@ -1773,6 +1869,50 @@ public class DroidHeadService extends Service implements TextToSpeech.OnInitList
                     Thread.sleep(durationMs + 120);
                 } catch (Exception ex) {
                     Log.d("DVR", "Nao foi possivel tocar som da lixeira: " + ex.getMessage());
+                } finally {
+                    if (audioTrack != null) {
+                        audioTrack.release();
+                    }
+                }
+            }
+        }).start();
+    }
+
+    private void PlayCameraSwitchSound() {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                AudioTrack audioTrack = null;
+                try {
+                    int sampleRate = 44100;
+                    int durationMs = 130;
+                    int sampleCount = sampleRate * durationMs / 1000;
+                    short[] pcm = new short[sampleCount];
+                    double phase = 0d;
+
+                    for (int i = 0; i < sampleCount; i++) {
+                        double progress = i / (double) sampleCount;
+                        double frequency = progress < 0.46d ? 820d : 1120d;
+                        double attack = Math.min(1d, progress / 0.08d);
+                        double release = Math.min(1d, (1d - progress) / 0.18d);
+                        double envelope = attack * release;
+                        phase += 2d * Math.PI * frequency / sampleRate;
+                        double sample = Math.sin(phase) * envelope * 0.12d;
+                        pcm[i] = (short) (sample * Short.MAX_VALUE);
+                    }
+
+                    audioTrack = new AudioTrack(
+                            AudioManager.STREAM_MUSIC,
+                            sampleRate,
+                            AudioFormat.CHANNEL_OUT_MONO,
+                            AudioFormat.ENCODING_PCM_16BIT,
+                            pcm.length * 2,
+                            AudioTrack.MODE_STATIC);
+                    audioTrack.write(pcm, 0, pcm.length);
+                    audioTrack.play();
+                    Thread.sleep(durationMs + 60);
+                } catch (Exception ex) {
+                    Log.d("DVR", "Nao foi possivel tocar som da camera: " + ex.getMessage());
                 } finally {
                     if (audioTrack != null) {
                         audioTrack.release();
